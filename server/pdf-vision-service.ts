@@ -27,9 +27,9 @@ interface ExtractedTransaction {
 }
 
 /**
- * Convierte un PDF buffer a imágenes (una por página)
+ * Extrae texto directamente del PDF (más eficiente que convertir a imágenes)
  */
-async function pdfToImages(buffer: Buffer): Promise<string[]> {
+async function extractTextFromPDF(buffer: Buffer): Promise<Array<{ pageNumber: number; text: string }>> {
   try {
     // Importar pdfjs-dist legacy build (recomendado para Node.js)
     let pdfjsLib: any;
@@ -47,11 +47,6 @@ async function pdfToImages(buffer: Buffer): Promise<string[]> {
       }
     }
     
-    const { createCanvas } = await import('canvas');
-    
-    // En Node.js con legacy build, no necesitamos configurar el worker
-    // El build legacy no usa workers, así que simplemente no lo configuramos
-    
     // Convertir Buffer a Uint8Array (pdfjs-dist requiere Uint8Array, no Buffer)
     const uint8Array = new Uint8Array(buffer);
     const loadingTask = pdfjsLib.getDocument({ 
@@ -62,57 +57,40 @@ async function pdfToImages(buffer: Buffer): Promise<string[]> {
       verbosity: 0 // Reducir logs
     });
     const pdf = await loadingTask.promise;
-    const images: string[] = [];
+    const pages: Array<{ pageNumber: number; text: string }> = [];
     
-    console.log(`Convirtiendo ${pdf.numPages} páginas del PDF a imágenes...`);
+    console.log(`Extrayendo texto de ${pdf.numPages} páginas del PDF...`);
     
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 2.0 }); // Escala 2x para mejor calidad
       
-      const canvas = createCanvas(viewport.width, viewport.height);
-      const context = canvas.getContext('2d');
+      // Extraer texto de la página
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ')
+        .trim();
       
-      // Configurar el renderContext para Node.js canvas
-      // Necesitamos asegurar que el canvas tenga todas las propiedades necesarias
-      const renderContext: any = {
-        canvasContext: context,
-        viewport: viewport,
-        // Deshabilitar renderizado de imágenes inline para evitar el error
-        // Esto puede hacer que algunas imágenes no se rendericen, pero el texto sí
-        enableWebGL: false,
-      };
+      pages.push({
+        pageNumber: pageNum,
+        text: pageText
+      });
       
-      try {
-        // Renderizar la página
-        const renderTask = page.render(renderContext);
-        await renderTask.promise;
-      } catch (renderError: any) {
-        // Si hay error al renderizar (por ejemplo, con imágenes), intentar solo texto
-        console.warn(`Advertencia al renderizar página ${pageNum}: ${renderError.message}`);
-        // Continuar de todas formas - puede que el texto se haya renderizado parcialmente
-      }
-      
-      // Convertir canvas a base64
-      const imageBuffer = canvas.toBuffer('image/png');
-      const base64Image = imageBuffer.toString('base64');
-      images.push(base64Image);
-      
-      console.log(`Página ${pageNum}/${pdf.numPages} convertida a imagen (${Math.round(imageBuffer.length / 1024)} KB)`);
+      console.log(`Página ${pageNum}/${pdf.numPages} - ${pageText.length} caracteres extraídos`);
     }
     
-    return images;
+    return pages;
   } catch (error: any) {
-    console.error('Error convirtiendo PDF a imágenes:', error);
-    throw new Error(`Error convirtiendo PDF a imágenes: ${error.message}`);
+    console.error('Error extrayendo texto del PDF:', error);
+    throw new Error(`Error extrayendo texto del PDF: ${error.message}`);
   }
 }
 
 /**
- * Extrae transacciones de una imagen usando DeepSeek Vision API
+ * Extrae transacciones del texto de una página usando DeepSeek API
  */
-async function extractTransactionsFromImage(
-  imageBase64: string,
+async function extractTransactionsFromText(
+  pageText: string,
   pageNumber: number,
   totalPages: number
 ): Promise<ExtractedTransaction[]> {
@@ -121,7 +99,12 @@ async function extractTransactionsFromImage(
     throw new Error('DEEPSEEK_API_KEY no configurada. No se puede usar visión.');
   }
 
-  const prompt = `Eres un experto en análisis de estados de cuenta bancarios. Analiza esta imagen de una página de estado de cuenta bancario (página ${pageNumber} de ${totalPages}) y extrae TODAS las transacciones que encuentres.
+  const prompt = `Eres un experto en análisis de estados de cuenta bancarios. Analiza este texto extraído de una página de estado de cuenta bancario (página ${pageNumber} de ${totalPages}) y extrae TODAS las transacciones que encuentres.
+
+TEXTO DE LA PÁGINA:
+${pageText}
+
+INSTRUCCIONES CRÍTICAS:
 
 INSTRUCCIONES CRÍTICAS:
 1. Busca TODAS las transacciones en la página, incluyendo las que están en tablas, listas o cualquier formato
@@ -177,18 +160,7 @@ IMPORTANTE:
           },
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: prompt
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/png;base64,${imageBase64}`
-                }
-              }
-            ]
+            content: prompt
           }
         ],
         temperature: 0.1, // Baja temperatura para mayor precisión
@@ -224,7 +196,7 @@ IMPORTANTE:
       return [];
     }
 
-    console.log(`Extraídas ${transactions.length} transacciones de la página ${pageNumber} usando DeepSeek Vision`);
+    console.log(`Extraídas ${transactions.length} transacciones de la página ${pageNumber} usando DeepSeek API (texto)`);
     
     // Log detallado de las transacciones extraídas
     transactions.forEach((t: any, idx: number) => {
@@ -271,53 +243,54 @@ IMPORTANTE:
 }
 
 /**
- * Procesa un PDF usando DeepSeek Vision API
- * Convierte cada página a imagen y extrae transacciones con IA
+ * Procesa un PDF usando DeepSeek API
+ * Extrae texto directamente del PDF y lo envía a la IA (más eficiente que imágenes)
  */
 export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransaction[]> {
   const DEEPSEEK_API_KEY = getDeepSeekApiKey();
   if (!DEEPSEEK_API_KEY) {
-    throw new Error('DEEPSEEK_API_KEY no configurada. No se puede usar visión. Usa el método tradicional.');
+    throw new Error('DEEPSEEK_API_KEY no configurada. No se puede usar IA.');
   }
   
-  console.log(`[Vision Service] API Key detectada: ${DEEPSEEK_API_KEY.substring(0, 10)}...`);
+  console.log(`[PDF Vision Service] API Key detectada: ${DEEPSEEK_API_KEY.substring(0, 10)}...`);
 
-  console.log('Iniciando procesamiento de PDF con DeepSeek Vision API...');
+  console.log('Iniciando procesamiento de PDF con DeepSeek API (extracción de texto)...');
   console.log('Tamaño del buffer:', buffer.length, 'bytes');
 
   try {
-    // Convertir PDF a imágenes
-    const images = await pdfToImages(buffer);
-    console.log(`PDF convertido a ${images.length} imágenes`);
+    // Extraer texto directamente del PDF (más rápido y eficiente)
+    const pages = await extractTextFromPDF(buffer);
+    console.log(`Texto extraído de ${pages.length} páginas`);
 
-    if (images.length === 0) {
-      throw new Error('No se pudieron convertir las páginas del PDF a imágenes');
+    if (pages.length === 0) {
+      throw new Error('No se pudo extraer texto del PDF');
     }
 
-    // Extraer transacciones de cada página
+    // Extraer transacciones de cada página usando IA
     const allTransactions: ExtractedTransaction[] = [];
 
-    for (let i = 0; i < images.length; i++) {
-      console.log(`Procesando página ${i + 1}/${images.length} con DeepSeek Vision...`);
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      console.log(`Procesando página ${page.pageNumber}/${pages.length} con DeepSeek API...`);
       
-      const pageTransactions = await extractTransactionsFromImage(
-        images[i],
-        i + 1,
-        images.length
+      const pageTransactions = await extractTransactionsFromText(
+        page.text,
+        page.pageNumber,
+        pages.length
       );
       
       allTransactions.push(...pageTransactions);
       
       // Pequeña pausa para evitar rate limiting
-      if (i < images.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      if (i < pages.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
 
-    console.log(`Total de transacciones extraídas con Vision: ${allTransactions.length}`);
+    console.log(`Total de transacciones extraídas con IA: ${allTransactions.length}`);
 
     if (allTransactions.length === 0) {
-      throw new Error('No se encontraron transacciones en el PDF usando DeepSeek Vision');
+      throw new Error('No se encontraron transacciones en el PDF usando DeepSeek API');
     }
 
     // Detectar moneda (usar el texto de la primera página si es posible)
@@ -380,8 +353,8 @@ export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransact
     console.log(`Procesamiento completado: ${transactions.length} transacciones`);
     return transactions;
   } catch (error: any) {
-    console.error('Error procesando PDF con Vision:', error);
-    throw new Error(`Error procesando PDF con DeepSeek Vision: ${error.message}`);
+    console.error('Error procesando PDF con IA:', error);
+    throw new Error(`Error procesando PDF con DeepSeek API: ${error.message}`);
   }
 }
 
