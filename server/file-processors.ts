@@ -253,10 +253,20 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
           }
         }
         
+        // Validar el monto antes de agregar
+        const finalAmount = isIncome ? Math.abs(amount) : -Math.abs(amount);
+        
+        if (isNaN(finalAmount) || finalAmount === 0) {
+          console.error(`ERROR: Monto inválido después de procesamiento: ${amount}, isIncome: ${isIncome}`);
+          continue; // Saltar esta transacción
+        }
+        
+        console.log(`Agregando transacción: ${transaction.date} | ${isIncome ? 'INGRESO' : 'GASTO'} | ${transaction.description.substring(0, 50)} | $${Math.abs(finalAmount).toFixed(2)}`);
+        
         rawTransactions.push({
           date: transaction.date,
           description: transaction.description,
-          amount: isIncome ? Math.abs(amount) : -Math.abs(amount),
+          amount: finalAmount,
         });
       }
     }
