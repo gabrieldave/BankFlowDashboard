@@ -190,6 +190,8 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
         const amount = parseFloat(transaction.amount);
         const isIncome = detectIncome(transaction.description, amount);
         
+        console.log(`Transacción procesada: ${isIncome ? 'INGRESO' : 'GASTO'} - ${transaction.description.substring(0, 50)} - ${amount}`);
+        
         rawTransactions.push({
           date: transaction.date,
           description: transaction.description,
@@ -333,17 +335,24 @@ function extractTransactionFromLine(line: string): { date: string; description: 
   }
   
   // Extraer descripción (todo excepto fecha y monto)
+  // Mantener más información para detectar mejor los abonos
   let description = line
     .replace(dateMatch[0], '')
     .replace(amountMatch, '')
-    .replace(/[^\w\s]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Limpiar pero mantener guiones y algunos caracteres importantes para detectar "Abono - Transferencia"
+  description = description
+    .replace(/\s+/g, ' ')  // Normalizar espacios
     .trim()
-    .slice(0, 200);
+    .slice(0, 500);  // Permitir descripciones más largas
   
   if (!description || description.length < 3) {
     return null;
   }
+  
+  // Log para debugging
+  console.log(`Transacción extraída: ${date} | ${description.substring(0, 60)} | ${amount}`);
   
   return {
     date,
@@ -384,15 +393,48 @@ function extractTransactionsAlternative(text: string): Array<{ date: string; des
 
 function detectIncome(description: string, amount: number): boolean {
   const desc = description.toLowerCase();
-  const incomeKeywords = ['deposito', 'depósito', 'transferencia recibida', 'abono', 'nomina', 'nómina', 'salario', 'sueldo', 'pago recibido', 'ingreso'];
   
-  // Si el monto es muy grande y positivo, probablemente es un ingreso
-  if (amount > 1000 && !incomeKeywords.some(kw => desc.includes(kw))) {
-    // Verificar si hay palabras de ingreso
-    return incomeKeywords.some(kw => desc.includes(kw));
+  // Keywords más completas para detectar ingresos
+  const incomeKeywords = [
+    'deposito', 'depósito', 'depositos', 'depósitos',
+    'transferencia recibida', 'transferencia recib', 'transfer recibida',
+    'abono', 'abonos', 'abono -', 'abono transferencia',
+    'nomina', 'nómina', 'nominas', 'nóminas',
+    'salario', 'salarios', 'sueldo', 'sueldos',
+    'pago recibido', 'pago recib', 'pagos recibidos',
+    'ingreso', 'ingresos', 'ingreso por',
+    'credito', 'crédito', 'creditos', 'créditos',
+    'cargo a favor', 'a favor',
+    'recarga', 'recargas',
+    'devolucion', 'devolución', 'reembolso'
+  ];
+  
+  // Buscar keywords de ingreso (más flexible)
+  for (const keyword of incomeKeywords) {
+    if (desc.includes(keyword)) {
+      console.log(`Ingreso detectado por keyword "${keyword}" en: ${description.substring(0, 50)}`);
+      return true;
+    }
   }
   
-  return incomeKeywords.some(kw => desc.includes(kw));
+  // Si el monto tiene signo + explícito, es ingreso
+  if (description.includes('+') || description.includes('+$') || description.includes('+ $')) {
+    console.log(`Ingreso detectado por signo + en: ${description.substring(0, 50)}`);
+    return true;
+  }
+  
+  // Si el monto es muy grande y positivo, probablemente es un ingreso
+  if (amount > 1000) {
+    console.log(`Posible ingreso por monto grande (${amount}) en: ${description.substring(0, 50)}`);
+    // Pero no asumir automáticamente, solo si no hay keywords de gasto
+    const expenseKeywords = ['cargo', 'cargos', 'retiro', 'retiros', 'pago', 'pagos', 'compra', 'compras', 'gasto', 'gastos'];
+    const hasExpenseKeyword = expenseKeywords.some(kw => desc.includes(kw));
+    if (!hasExpenseKeyword) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 function normalizeDate(dateStr: string): string {
