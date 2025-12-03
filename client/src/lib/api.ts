@@ -82,3 +82,20 @@ export async function deleteAllTransactions(): Promise<void> {
     throw new Error('Error eliminando transacciones');
   }
 }
+
+export async function updateTransactionsCurrency(currency: string = 'MXN'): Promise<{ message: string; updated: number }> {
+  const response = await fetch('/api/transactions/update-currency', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ currency }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Error actualizando currency');
+  }
+
+  return response.json();
+}

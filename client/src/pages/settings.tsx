@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { Settings as SettingsIcon, Save, Globe, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Settings as SettingsIcon, Save, Globe, Loader2, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { updateTransactionsCurrency } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 const CURRENCIES = [
   { code: 'MXN', name: 'Peso Mexicano', symbol: '$' },
@@ -21,14 +23,16 @@ const CURRENCIES = [
 
 export default function Settings() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedCurrency, setSelectedCurrency] = useState<string>('MXN');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Cargar moneda guardada del localStorage
-  useState(() => {
+  useEffect(() => {
     const savedCurrency = localStorage.getItem('defaultCurrency') || 'MXN';
     setSelectedCurrency(savedCurrency);
-  });
+  }, []);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -48,6 +52,28 @@ export default function Settings() {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleUpdateExisting = async () => {
+    setIsUpdating(true);
+    try {
+      const result = await updateTransactionsCurrency(selectedCurrency);
+      toast({
+        title: "Transacciones actualizadas",
+        description: result.message,
+      });
+      // Refrescar las transacciones
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudieron actualizar las transacciones",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -96,23 +122,46 @@ export default function Settings() {
                 Esta moneda se usará cuando no se pueda detectar automáticamente del archivo.
               </p>
             </div>
-            <Button 
-              onClick={handleSave} 
-              disabled={isSaving}
-              className="w-full sm:w-auto"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Guardar configuración
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button 
+                onClick={handleSave} 
+                disabled={isSaving}
+                className="w-full sm:w-auto"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Guardar configuración
+                  </>
+                )}
+              </Button>
+              <Button 
+                onClick={handleUpdateExisting} 
+                disabled={isUpdating}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                {isUpdating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Actualizar transacciones existentes
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Si tus transacciones muestran una moneda incorrecta, haz clic en "Actualizar transacciones existentes" para cambiarlas a {CURRENCIES.find(c => c.code === selectedCurrency)?.name}.
+            </p>
           </CardContent>
         </Card>
 

@@ -76,6 +76,19 @@ export class MemStorage implements IStorage {
     return results;
   }
 
+  async updateTransaction(id: number, updates: Partial<InsertTransaction>): Promise<Transaction> {
+    const existing = this.transactionsMap.get(id);
+    if (!existing) {
+      throw new Error(`Transaction ${id} not found`);
+    }
+    const updated: Transaction = {
+      ...existing,
+      ...updates,
+    };
+    this.transactionsMap.set(id, updated);
+    return updated;
+  }
+
   async deleteTransaction(id: number): Promise<void> {
     this.transactionsMap.delete(id);
   }
