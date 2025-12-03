@@ -101,22 +101,24 @@ async function extractTransactionsFromImage(
 
 INSTRUCCIONES CRÍTICAS:
 1. Busca TODAS las transacciones en la página, incluyendo las que están en tablas, listas o cualquier formato
-2. Para cada transacción, identifica:
-   - Fecha (formato: YYYY-MM-DD)
-   - Descripción completa (todo el texto de la transacción)
-   - Monto (número con signo: + para ingresos/abonos, - para gastos/cargos)
-   - Tipo: "income" si tiene signo + o es un abono/ingreso, "expense" si tiene signo - o es un cargo/gasto
+2. Para cada transacción, identifica EXACTAMENTE:
+   - Fecha: Convierte formatos como "01/sep/2025" o "01/09/2025" a "2025-09-01" (YYYY-MM-DD)
+   - Descripción: Toma la descripción completa pero sin repetir "Fecha y hora:" múltiples veces. Si dice "Abono - Transferencia recibida", usa eso. Si tiene detalles adicionales, inclúyelos pero de forma concisa.
+   - Monto: EXTRAE EL MONTO EXACTO que aparece en la columna "Monto de transacción". Si dice "- $ 200.00" → amount: -200.00. Si dice "+$ 1,000.00" → amount: 1000.00. NO uses valores por defecto ni valores incorrectos.
+   - Tipo: "income" si tiene signo + o dice "Abono", "expense" si tiene signo - o dice "Cargo"
 
-3. IMPORTANTE sobre signos:
-   - Si el monto tiene signo + o dice "Abono", "Transferencia recibida", "Depósito" → type: "income"
-   - Si el monto tiene signo - o dice "Cargo", "Pago", "Compra", "Retiro" → type: "expense"
-   - Si no hay signo explícito, usa el contexto de la descripción
+3. REGLAS CRÍTICAS DE EXTRACCIÓN:
+   - El monto DEBE ser el número exacto que aparece en el PDF, NO un valor por defecto
+   - Si el monto tiene formato "1,000.00" con comas, conviértelo a 1000.00 (sin comas)
+   - Si el monto tiene signo "+$" o "+ $" → es INGRESO (amount positivo, type: "income")
+   - Si el monto tiene signo "-$" o "- $" → es GASTO (amount negativo, type: "expense")
+   - NO uses el mismo monto para todas las transacciones. Cada una tiene su monto único.
 
 4. Formato de respuesta: Responde SOLO con un JSON array válido, sin texto adicional:
 [
   {
     "date": "2025-09-01",
-    "description": "Cargo - Transferencia enviada",
+    "description": "Cargo - Transferencia enviada Transferencia Interbancaria SPEI",
     "amount": -200.00,
     "type": "expense"
   },
@@ -130,7 +132,10 @@ INSTRUCCIONES CRÍTICAS:
 
 5. Si no encuentras transacciones, devuelve un array vacío: []
 
-IMPORTANTE: Extrae TODAS las transacciones visibles en la página, no solo algunas.`;
+IMPORTANTE: 
+- Extrae TODAS las transacciones visibles en la página
+- Cada monto DEBE ser único y correcto según lo que aparece en el PDF
+- NO uses valores por defecto como 9.00 o valores repetidos`;
 
   try {
     const response = await fetch(DEEPSEEK_API_URL, {

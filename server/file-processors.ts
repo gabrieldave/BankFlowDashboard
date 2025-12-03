@@ -122,10 +122,9 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
 }
 
 export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
-  // TEMPORALMENTE DESHABILITADO: DeepSeek Vision hasta que se verifique que funciona correctamente
   // Intentar primero con DeepSeek Vision si está disponible
   const DEEPSEEK_API_KEY = (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY) || '';
-  const USE_VISION = false; // Deshabilitado temporalmente para debugging
+  const USE_VISION = true; // Activado para usar IA en extracción
   
   if (USE_VISION && DEEPSEEK_API_KEY) {
     try {
