@@ -9,6 +9,7 @@ import Upload from "@/pages/upload";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import Layout from "@/components/layout";
+import { TransactionProvider } from "@/context/TransactionContext";
 
 function Router() {
   return (
@@ -25,12 +26,14 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Layout>
-          <Router />
-        </Layout>
-      </TooltipProvider>
+      <TransactionProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Layout>
+            <Router />
+          </Layout>
+        </TooltipProvider>
+      </TransactionProvider>
     </QueryClientProvider>
   );
 }

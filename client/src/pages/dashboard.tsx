@@ -1,7 +1,6 @@
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
-  DollarSign, 
   Wallet, 
   TrendingUp,
   Search,
@@ -33,15 +32,17 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { MOCK_TRANSACTIONS, SUMMARY_STATS, MONTHLY_DATA, CATEGORY_DATA } from "@/lib/mock-data";
+import { useTransactions } from "@/context/TransactionContext";
 
 export default function Dashboard() {
+  const { transactions, stats, monthlyData, categoryData } = useTransactions();
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-heading font-bold text-gray-900">Panel Financiero</h1>
-          <p className="text-muted-foreground">Bienvenido de nuevo, aquí está el resumen de tus finanzas.</p>
+          <p className="text-muted-foreground">Resumen de tus finanzas basado en los datos importados.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2">
@@ -59,7 +60,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard 
           title="Balance Total" 
-          amount={SUMMARY_STATS.totalBalance} 
+          amount={stats.totalBalance} 
           trend="+2.5%" 
           trendUp={true}
           icon={Wallet}
@@ -67,8 +68,8 @@ export default function Dashboard() {
           bgColor="bg-blue-50"
         />
         <SummaryCard 
-          title="Ingresos (Mes)" 
-          amount={SUMMARY_STATS.monthlyIncome} 
+          title="Ingresos" 
+          amount={stats.monthlyIncome} 
           trend="+12%" 
           trendUp={true}
           icon={ArrowUpRight}
@@ -76,8 +77,8 @@ export default function Dashboard() {
           bgColor="bg-green-50"
         />
         <SummaryCard 
-          title="Gastos (Mes)" 
-          amount={SUMMARY_STATS.monthlyExpenses} 
+          title="Gastos" 
+          amount={stats.monthlyExpenses} 
           trend="-5%" 
           trendUp={true} // Positive because spending less is good
           icon={ArrowDownRight}
@@ -86,7 +87,7 @@ export default function Dashboard() {
         />
         <SummaryCard 
           title="Tasa de Ahorro" 
-          amount={SUMMARY_STATS.savingsRate} 
+          amount={stats.savingsRate} 
           isPercent={true}
           trend="+4.2%" 
           trendUp={true}
@@ -106,7 +107,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={MONTHLY_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(221 83% 53%)" stopOpacity={0.3}/>
@@ -158,7 +159,7 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={CATEGORY_DATA}
+                    data={categoryData}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -167,7 +168,7 @@ export default function Dashboard() {
                     dataKey="value"
                     stroke="none"
                   >
-                    {CATEGORY_DATA.map((entry, index) => (
+                    {categoryData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -178,8 +179,10 @@ export default function Dashboard() {
               {/* Center Text */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-xl font-bold text-foreground">€1,556</p>
+                  <p className="text-xs text-muted-foreground">Total Gastos</p>
+                  <p className="text-xl font-bold text-foreground">
+                    {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(stats.monthlyExpenses)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -216,15 +219,22 @@ export default function Dashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {MOCK_TRANSACTIONS.map((transaction) => (
+              {transactions.map((transaction) => (
                 <TableRow key={transaction.id} className="hover:bg-slate-50/50 transition-colors">
                   <TableCell className="font-medium text-muted-foreground text-xs">
-                    {new Date(transaction.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                    {/* Handle potential date parsing issues */}
+                    {(() => {
+                       try {
+                         return new Date(transaction.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                       } catch (e) {
+                         return transaction.date;
+                       }
+                    })()}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
-                      <span className="font-medium text-gray-900">{transaction.merchant}</span>
-                      <span className="text-xs text-muted-foreground">{transaction.description}</span>
+                      <span className="font-medium text-gray-900">{transaction.merchant || transaction.description}</span>
+                      {transaction.merchant && <span className="text-xs text-muted-foreground">{transaction.description}</span>}
                     </div>
                   </TableCell>
                   <TableCell>

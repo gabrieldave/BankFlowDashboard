@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, FileType } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { useTransactions } from "@/context/TransactionContext";
+import { Transaction } from "@/lib/mock-data";
 
 export default function UploadPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { setTransactions } = useTransactions();
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -26,33 +29,95 @@ export default function UploadPage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    startUploadSimulation();
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processFile(files[0]);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      startUploadSimulation();
+      processFile(e.target.files[0]);
     }
   };
 
-  const startUploadSimulation = () => {
+  const processFile = (file: File) => {
+    if (file.type === "application/pdf") {
+      toast({
+        title: "PDF Detectado",
+        description: "Actualmente estamos en modo prototipo. Para leer PDFs reales necesitamos activar el servidor. Por ahora, usaré datos de demostración.",
+        variant: "default",
+      });
+      startUploadSimulation(false); // False means "mock"
+    } else if (file.type === "text/csv" || file.name.endsWith('.csv')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        parseCSV(text);
+      };
+      reader.readAsText(file);
+      startUploadSimulation(true); // True means "real data processing"
+    } else {
+      // Default fallback
+      startUploadSimulation(false);
+    }
+  };
+
+  const parseCSV = (text: string) => {
+    // Very basic CSV parser for prototype
+    // Assumes format: Date, Description, Amount, Category (optional)
+    try {
+      const lines = text.split('\n');
+      const newTransactions: Transaction[] = [];
+      
+      lines.slice(1).forEach((line, index) => {
+        if (!line.trim()) return;
+        const cols = line.split(',');
+        if (cols.length >= 3) {
+          const amount = parseFloat(cols[2]);
+          newTransactions.push({
+            id: `csv-${index}`,
+            date: cols[0].trim(),
+            description: cols[1].trim(),
+            amount: Math.abs(amount),
+            type: amount >= 0 ? 'income' : 'expense',
+            category: cols[3]?.trim() || 'General',
+            merchant: cols[1].trim()
+          });
+        }
+      });
+
+      if (newTransactions.length > 0) {
+        // We wait for the animation to finish before setting data
+        setTimeout(() => {
+          setTransactions(newTransactions);
+        }, 1500);
+      }
+    } catch (e) {
+      console.error("Error parsing CSV", e);
+    }
+  };
+
+  const startUploadSimulation = (isRealProcessing: boolean) => {
     setIsUploading(true);
-    // Simulate upload progress
     let progress = 0;
     const interval = setInterval(() => {
-      progress += 10;
+      progress += 5;
       setUploadProgress(progress);
       if (progress >= 100) {
         clearInterval(interval);
         setTimeout(() => {
           toast({
-            title: "Archivo procesado correctamente",
-            description: "Tus transacciones han sido importadas con éxito.",
+            title: isRealProcessing ? "CSV Importado" : "Simulación Completada",
+            description: isRealProcessing 
+              ? "Tus datos han sido cargados correctamente." 
+              : "Mostrando datos de demostración (Sube un CSV para ver datos reales).",
           });
           setLocation("/dashboard");
-        }, 800);
+        }, 500);
       }
-    }, 300);
+    }, 50); // Faster for prototype
   };
 
   return (
@@ -60,7 +125,11 @@ export default function UploadPage() {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-heading font-bold text-gray-900">Sube tus estados de cuenta</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Analizamos tus PDFs o CSVs bancarios automáticamente. Identificamos ingresos, gastos y categorizamos cada movimiento por ti.
+          Analizamos tus archivos automáticamente. 
+          <br/>
+          <span className="text-sm font-medium text-primary bg-blue-50 px-2 py-1 rounded-md mt-2 inline-block">
+            Nota: Sube un CSV para ver tus datos reales. Los PDFs usan datos de prueba en esta versión.
+          </span>
         </p>
       </div>
 
@@ -89,7 +158,7 @@ export default function UploadPage() {
               
               <div className="space-y-2">
                 <h3 className="text-2xl font-semibold text-gray-900">Arrastra y suelta tu archivo aquí</h3>
-                <p className="text-muted-foreground">Soporta PDF, CSV o Excel (max. 10MB)</p>
+                <p className="text-muted-foreground">Recomendado: .CSV para datos reales</p>
               </div>
 
               <div className="flex items-center justify-center gap-4 pt-4">
@@ -123,8 +192,8 @@ export default function UploadPage() {
               </div>
               
               <div className="space-y-2">
-                <h3 className="text-2xl font-semibold text-gray-900">Procesando estado de cuenta...</h3>
-                <p className="text-muted-foreground">Estamos categorizando tus transacciones usando IA.</p>
+                <h3 className="text-2xl font-semibold text-gray-900">Procesando archivo...</h3>
+                <p className="text-muted-foreground">Normalizando transacciones...</p>
               </div>
 
               <div className="space-y-2">
@@ -144,9 +213,9 @@ export default function UploadPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
         {[
-          { icon: CheckCircle2, title: "Seguro y Privado", desc: "Tus datos se procesan localmente" },
-          { icon: FileText, title: "Multi-formato", desc: "PDFs de cualquier banco" },
-          { icon: AlertCircle, title: "Detección Inteligente", desc: "Identifica suscripciones y gastos fijos" }
+          { icon: CheckCircle2, title: "Modo CSV Activo", desc: "Sube un CSV para ver tus datos reales" },
+          { icon: FileType, title: "PDF (Requiere Server)", desc: "La lectura de PDF requiere actualización" },
+          { icon: AlertCircle, title: "Privacidad Local", desc: "Tus datos no salen de tu navegador" }
         ].map((feature, idx) => (
           <div key={idx} className="p-4 rounded-xl bg-white shadow-sm border border-gray-100">
             <feature.icon className="w-6 h-6 text-primary mx-auto mb-3" />
