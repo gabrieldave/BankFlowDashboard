@@ -414,6 +414,13 @@ function extractTransactionFromLine(line: string): { date: string; description: 
   const amount = parseFloat(amountStr);
   
   if (isNaN(amount) || amount === 0) {
+    console.warn(`Monto inválido o cero en línea: ${line.substring(0, 100)}`);
+    return null;
+  }
+  
+  // Validar que el monto sea razonable (no muy pequeño, probablemente error)
+  if (Math.abs(amount) < 0.01) {
+    console.warn(`Monto muy pequeño (${amount}) en línea: ${line.substring(0, 100)}`);
     return null;
   }
   
@@ -437,11 +444,12 @@ function extractTransactionFromLine(line: string): { date: string; description: 
     .slice(0, 500);  // Permitir descripciones más largas
   
   if (!description || description.length < 3) {
+    console.warn(`Descripción muy corta o vacía en línea: ${line.substring(0, 100)}`);
     return null;
   }
   
-  // Log para debugging
-  console.log(`Transacción extraída: ${date} | ${description.substring(0, 60)} | ${isPositive ? '+' : '-'}$${amount}`);
+  // Log detallado para debugging
+  console.log(`Transacción extraída: ${date} | ${description.substring(0, 60)} | ${isPositive ? '+' : '-'}$${amount.toFixed(2)} | amountMatch="${amountMatch}" | amountStr="${amountStr}"`);
   
   return {
     date,
