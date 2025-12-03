@@ -128,9 +128,27 @@ La IA puede clasificar transacciones en las siguientes categorías:
 
 ## 📝 Notas
 
-- La aplicación usa almacenamiento en memoria por defecto. Para persistencia, configura `DATABASE_URL` en `.env`
+- La aplicación usa **PocketBase** como base de datos por defecto. Configura `POCKETBASE_URL` en `.env`
+- Para persistencia con PostgreSQL, configura `DATABASE_URL` en `.env` (opcional)
 - El procesamiento de PDF puede variar según el formato del banco
 - La clasificación con IA puede tomar unos segundos dependiendo del número de transacciones
+
+## 🚀 Despliegue
+
+### Desplegar en Coolify
+
+Consulta la guía completa en [DESPLIEGUE_COOLIFY.md](./DESPLIEGUE_COOLIFY.md)
+
+**Configuración rápida:**
+1. Conecta tu repositorio en Coolify
+2. Configura las variables de entorno (ver `.env.example`)
+3. Despliega
+
+**Variables de entorno necesarias:**
+- `POCKETBASE_URL`: URL completa de tu instancia PocketBase
+- `POCKETBASE_ADMIN_EMAIL`: Email del administrador (opcional)
+- `POCKETBASE_ADMIN_PASSWORD`: Contraseña del administrador (opcional)
+- `DEEPSEEK_API_KEY`: API Key de DeepSeek (opcional)
 
 ## 🤝 Contribuir
 
