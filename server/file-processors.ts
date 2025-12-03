@@ -279,12 +279,12 @@ function extractTransactionFromLine(line: string): { date: string; description: 
     /(\d{1,2}\s+\w{3}\s+\d{2,4})/,           // DD MMM YYYY
   ];
   
-  // Patrones más flexibles para montos
+  // Patrones más flexibles para montos (incluyendo signo + para abonos)
   const amountPatterns = [
-    /([\-]?\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/,  // Formato estándar
-    /([\-]?\d+[,\.]\d{2})/,                           // Formato simple
-    /([\-]?\$\s*\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/, // Con símbolo $
-    /([\-]?\d+\.\d{2})/,                              // Formato decimal
+    /([\+\-]?\$\s*\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/, // Con símbolo $ y posible signo +
+    /([\+\-]?\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/,  // Formato estándar con signo +
+    /([\+\-]?\d+[,\.]\d{2})/,                           // Formato simple con signo +
+    /([\+\-]?\d+\.\d{2})/,                              // Formato decimal con signo +
   ];
   
   let dateMatch: RegExpMatchArray | null = null;
@@ -317,10 +317,11 @@ function extractTransactionFromLine(line: string): { date: string; description: 
   
   const date = normalizeDate(dateMatch[1]);
   
-  // Limpiar el monto
+  // Limpiar el monto (preservar signo + para detectar abonos)
   let amountStr = amountMatch
     .replace(/\$/g, '')
     .replace(/\s+/g, '')
+    .replace(/\+/g, '')  // Remover + para parseFloat, pero ya lo detectamos antes
     .replace(/\./g, (match: string, offset: number, string: string) => {
       // Si hay múltiples puntos, mantener solo el último como decimal
       const after = string.substring(offset + 1);
