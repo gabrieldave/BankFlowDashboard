@@ -1,22 +1,26 @@
-11:56:34 PM [express] serving on port 5000
+11:58:06 PM [express] serving on port 5000
 [PDF Parser] Usando IA para parsing. API_KEY presente: SÍ (sk-c0f2f1e...)
 Procesando PDF con DeepSeek Vision API (IA)...
 [Vision Service] API Key detectada: sk-c0f2f1e...
 Iniciando procesamiento de PDF con DeepSeek Vision API...
 Tamaño del buffer: 150746 bytes
-Error convirtiendo PDF a imágenes: Error: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
-    at <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs:21632:31)
-Error procesando PDF con Vision: Error: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
-    at pdfToImages (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:90:11)
-    at async parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:273:20)
+Error convirtiendo PDF a imágenes: Error: Invalid `workerSrc` type.
+    at GlobalWorkerOptions.set workerSrc (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs:18526:13)
+    at pdfToImages (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:56:36)
+    at async parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:280:20)
     at async parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:74:20)
     at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
-❌ [PDF Parser] Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
-📋 [PDF Parser] Stack trace: Error: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
-    at parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:367:11)
+Error procesando PDF con Vision: Error: Error convirtiendo PDF a imágenes: Invalid `workerSrc` type.
+    at pdfToImages (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:97:11)
+    at async parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:280:20)
     at async parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:74:20)
     at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
-Error específico en PDF: Error: Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente.
+❌ [PDF Parser] Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Invalid `workerSrc` type.
+📋 [PDF Parser] Stack trace: Error: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Invalid `workerSrc` type.
+    at parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:374:11)
+    at async parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:74:20)
+    at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
+Error específico en PDF: Error: Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Invalid `workerSrc` type.. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente.
     at parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:80:11)
     at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
-11:57:05 PM [express] POST /api/upload 400 in 22633ms :: {"error":"Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: \"Cannot find module '\\\\cdnjs.cloudflare.com\\ajax\\libs\\pdf.js\\5.4.449\\pdf.worker.min.js' imported from C:\\Users\\dakyo\\Documents\\Proyectos de apps\\BankFlowDashboard\\node_modules\\pdfjs-dist\\legacy\\build\\pdf.mjs\".. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente."}
+11:58:15 PM [express] POST /api/upload 400 in 453ms :: {"error":"Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Invalid `workerSrc` type.. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente."}

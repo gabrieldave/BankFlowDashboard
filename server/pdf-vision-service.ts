@@ -49,12 +49,8 @@ async function pdfToImages(buffer: Buffer): Promise<string[]> {
     
     const { createCanvas } = await import('canvas');
     
-    // Configurar worker para Node.js (deshabilitar worker o usar uno local)
-    // En Node.js, no necesitamos worker, podemos deshabilitarlo
-    if (pdfjsLib.GlobalWorkerOptions) {
-      // Deshabilitar worker en Node.js - no es necesario para el build legacy
-      pdfjsLib.GlobalWorkerOptions.workerSrc = false;
-    }
+    // En Node.js con legacy build, no necesitamos configurar el worker
+    // El build legacy no usa workers, así que simplemente no lo configuramos
     
     // Convertir Buffer a Uint8Array (pdfjs-dist requiere Uint8Array, no Buffer)
     const uint8Array = new Uint8Array(buffer);
@@ -62,7 +58,8 @@ async function pdfToImages(buffer: Buffer): Promise<string[]> {
       data: uint8Array,
       useWorkerFetch: false,
       isEvalSupported: false,
-      useSystemFonts: true
+      useSystemFonts: true,
+      verbosity: 0 // Reducir logs
     });
     const pdf = await loadingTask.promise;
     const images: string[] = [];
