@@ -197,13 +197,43 @@ IMPORTANTE: Extrae TODAS las transacciones visibles en la página, no solo algun
 
     console.log(`Extraídas ${transactions.length} transacciones de la página ${pageNumber} usando DeepSeek Vision`);
     
-    return transactions.map((t: any) => ({
-      date: t.date || new Date().toISOString().split('T')[0],
-      description: t.description || '',
-      amount: typeof t.amount === 'number' ? t.amount : parseFloat(t.amount) || 0,
-      type: t.type === 'income' ? 'income' : 'expense',
-    })).filter((t: ExtractedTransaction) => 
-      t.date && t.description && !isNaN(t.amount) && t.amount !== 0
+    // Log detallado de las transacciones extraídas
+    transactions.forEach((t: any, idx: number) => {
+      console.log(`  Transacción ${idx + 1}: fecha=${t.date}, desc=${t.description?.substring(0, 50)}, amount=${t.amount}, type=${t.type}`);
+    });
+    
+    return transactions.map((t: any) => {
+      // Validar y convertir el monto
+      let amount: number;
+      if (typeof t.amount === 'number') {
+        amount = t.amount;
+      } else if (typeof t.amount === 'string') {
+        // Limpiar el string de monto
+        const cleanAmount = t.amount.replace(/[^\d.,-+]/g, '').replace(',', '.');
+        amount = parseFloat(cleanAmount);
+        if (isNaN(amount)) {
+          console.warn(`Monto inválido en transacción: "${t.amount}" -> parseado como NaN`);
+          return null;
+        }
+      } else {
+        console.warn(`Tipo de monto inválido: ${typeof t.amount}, valor: ${t.amount}`);
+        return null;
+      }
+      
+      // Validar que el monto no sea 0 o muy pequeño (probablemente error)
+      if (amount === 0 || Math.abs(amount) < 0.01) {
+        console.warn(`Monto muy pequeño o cero en transacción: ${amount}`);
+        return null;
+      }
+      
+      return {
+        date: t.date || new Date().toISOString().split('T')[0],
+        description: t.description || '',
+        amount: amount,
+        type: t.type === 'income' ? 'income' : 'expense',
+      };
+    }).filter((t: ExtractedTransaction | null): t is ExtractedTransaction => 
+      t !== null && t.date && t.description && !isNaN(t.amount) && t.amount !== 0
     );
   } catch (error: any) {
     console.error(`Error extrayendo transacciones de la página ${pageNumber}:`, error);
@@ -269,15 +299,27 @@ export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransact
     }
 
     // Convertir a formato InsertTransaction
-    const transactions: InsertTransaction[] = allTransactions.map((t) => ({
-      date: t.date,
-      description: t.description.substring(0, 500),
-      amount: Math.abs(t.amount).toString(),
-      type: t.type,
-      category: 'General', // Se clasificará después con IA
-      merchant: t.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
-      currency: detectedCurrency,
-    }));
+    const transactions: InsertTransaction[] = allTransactions.map((t) => {
+      // Validar el monto antes de guardar
+      const amount = Math.abs(t.amount);
+      if (isNaN(amount) || amount === 0) {
+        console.error(`Transacción con monto inválido: ${JSON.stringify(t)}`);
+        return null;
+      }
+      
+      // Log para debugging
+      console.log(`Transacción procesada: ${t.date} | ${t.type} | ${t.description.substring(0, 50)} | $${amount}`);
+      
+      return {
+        date: t.date,
+        description: t.description.substring(0, 500),
+        amount: amount.toString(),
+        type: t.type,
+        category: 'General', // Se clasificará después con IA
+        merchant: t.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
+        currency: detectedCurrency,
+      };
+    }).filter((t): t is InsertTransaction => t !== null);
 
     // Clasificar transacciones con IA (usar el servicio existente)
     console.log('Clasificando transacciones extraídas con IA...');

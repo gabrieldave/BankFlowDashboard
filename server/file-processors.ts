@@ -122,10 +122,12 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
 }
 
 export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
+  // TEMPORALMENTE DESHABILITADO: DeepSeek Vision hasta que se verifique que funciona correctamente
   // Intentar primero con DeepSeek Vision si está disponible
   const DEEPSEEK_API_KEY = (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY) || '';
+  const USE_VISION = false; // Deshabilitado temporalmente para debugging
   
-  if (DEEPSEEK_API_KEY) {
+  if (USE_VISION && DEEPSEEK_API_KEY) {
     try {
       console.log('Intentando procesar PDF con DeepSeek Vision API...');
       const { parsePDFWithVision } = await import('./pdf-vision-service');
@@ -135,7 +137,7 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
       // Continuar con el método tradicional como fallback
     }
   } else {
-    console.log('DEEPSEEK_API_KEY no configurada, usando método tradicional de extracción');
+    console.log('Usando método tradicional de extracción (Vision deshabilitado temporalmente)');
   }
 
   // Método tradicional (fallback)
