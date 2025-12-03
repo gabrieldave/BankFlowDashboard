@@ -509,8 +509,42 @@ function detectIncome(description: string, amount: number, hasPlusSign: boolean 
 }
 
 function normalizeDate(dateStr: string): string {
+  // Primero intentar detectar formato con mes en texto (ej: "01/sep/2025" o "1 oct 2025")
+  const textMonthPattern = /(\d{1,2})[\/\s]+(\w{3,})[\/\s]+(\d{2,4})/i;
+  const textMonthMatch = dateStr.match(textMonthPattern);
+  
+  if (textMonthMatch) {
+    const [, day, monthText, year] = textMonthMatch;
+    const monthNames: Record<string, string> = {
+      'ene': '01', 'jan': '01', 'enero': '01', 'january': '01',
+      'feb': '02', 'feb': '02', 'febrero': '02', 'february': '02',
+      'mar': '03', 'mar': '03', 'marzo': '03', 'march': '03',
+      'abr': '04', 'apr': '04', 'abril': '04', 'april': '04',
+      'may': '05', 'may': '05', 'mayo': '05', 'may': '05',
+      'jun': '06', 'jun': '06', 'junio': '06', 'june': '06',
+      'jul': '07', 'jul': '07', 'julio': '07', 'july': '07',
+      'ago': '08', 'aug': '08', 'agosto': '08', 'august': '08',
+      'sep': '09', 'sep': '09', 'septiembre': '09', 'september': '09',
+      'oct': '10', 'oct': '10', 'octubre': '10', 'october': '10',
+      'nov': '11', 'nov': '11', 'noviembre': '11', 'november': '11',
+      'dic': '12', 'dec': '12', 'diciembre': '12', 'december': '12',
+    };
+    
+    const monthLower = monthText.toLowerCase();
+    if (monthNames[monthLower]) {
+      const normalizedYear = year.length === 2 ? '20' + year : year;
+      const normalized = `${normalizedYear}-${monthNames[monthLower]}-${day.padStart(2, '0')}`;
+      console.log(`Fecha normalizada (texto): ${dateStr} -> ${normalized}`);
+      return normalized;
+    }
+  }
+  
+  // Formato numérico estándar (DD/MM/YYYY o DD-MM-YYYY)
   const parts = dateStr.split(/[\/\-]/);
-  if (parts.length !== 3) return new Date().toISOString().split('T')[0];
+  if (parts.length !== 3) {
+    console.warn(`Fecha inválida: ${dateStr}`);
+    return new Date().toISOString().split('T')[0];
+  }
   
   let [day, month, year] = parts;
   
@@ -518,7 +552,9 @@ function normalizeDate(dateStr: string): string {
     year = '20' + year;
   }
   
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  const normalized = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  console.log(`Fecha normalizada (numérico): ${dateStr} -> ${normalized}`);
+  return normalized;
 }
 
 // Funciones de categorización básica movidas a ai-service.ts
