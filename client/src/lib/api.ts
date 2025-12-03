@@ -6,6 +6,7 @@ export interface Transaction {
   type: 'income' | 'expense';
   category: string;
   merchant: string;
+  currency?: string;
   createdAt: Date;
 }
 

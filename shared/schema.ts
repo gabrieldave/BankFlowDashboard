@@ -25,6 +25,7 @@ export const transactions = pgTable("transactions", {
   type: text("type").notNull(),
   category: text("category").notNull(),
   merchant: text("merchant").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("MXN"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

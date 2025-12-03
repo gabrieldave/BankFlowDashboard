@@ -1,5 +1,6 @@
 import type { InsertTransaction } from "@shared/schema";
 import { classifyTransaction, classifyTransactionsBatch } from "./ai-service";
+import { detectCurrencyFromText } from "./currency-detector";
 
 // Importar polyfills para APIs del DOM necesarias para pdf-parse
 import "./pdf-polyfill";
@@ -68,6 +69,10 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
   const lines = content.trim().split('\n');
   const rawTransactions: Array<{ date: string; description: string; amount: number }> = [];
   
+  // Detectar moneda del contenido
+  const detectedCurrency = detectCurrencyFromText(content);
+  console.log(`Moneda detectada en CSV: ${detectedCurrency}`);
+  
   // Primero extraer todas las transacciones
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -109,6 +114,7 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
       type: raw.amount >= 0 ? 'income' : 'expense',
       category: classification.category,
       merchant: classification.merchant,
+      currency: detectedCurrency,
     };
   });
   
@@ -154,6 +160,10 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
     if (!text || text.trim().length === 0) {
       throw new Error('El PDF no contiene texto legible. Puede ser un PDF escaneado o protegido.');
     }
+    
+    // Detectar moneda del contenido del PDF
+    const detectedCurrency = detectCurrencyFromText(text);
+    console.log(`Moneda detectada en PDF: ${detectedCurrency}`);
     
     const rawTransactions: Array<{ date: string; description: string; amount: number }> = [];
     
@@ -224,28 +234,31 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
     }
     
     // Combinar datos con clasificaciones
-    const transactions: InsertTransaction[] = rawTransactions.map((raw, idx) => {
-      const classification = (classifications && classifications[idx]) ? classifications[idx] : {
-        category: 'General',
-        merchant: raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
-        confidence: 0.5,
-      };
+    const transactions: InsertTransaction[] = rawTransactions
+      .map((raw, idx) => {
+        const classification = (classifications && classifications[idx]) ? classifications[idx] : {
+          category: 'General',
+          merchant: raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
+          confidence: 0.5,
+        };
 
-      // Validar que los datos sean correctos
-      if (!raw.date || !raw.description || isNaN(parseFloat(raw.amount.toString()))) {
-        console.warn('Transacción inválida encontrada:', raw);
-        return null;
-      }
+        // Validar que los datos sean correctos
+        if (!raw.date || !raw.description || isNaN(parseFloat(raw.amount.toString()))) {
+          console.warn('Transacción inválida encontrada:', raw);
+          return null;
+        }
 
-      return {
-        date: raw.date,
-        description: raw.description.substring(0, 500), // Limitar longitud
-        amount: Math.abs(raw.amount).toString(),
-        type: raw.amount >= 0 ? 'income' : 'expense',
-        category: classification.category || 'General',
-        merchant: (classification.merchant || raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido').substring(0, 200),
-      };
-    }).filter((t): t is InsertTransaction => t !== null);
+        return {
+          date: raw.date,
+          description: raw.description.substring(0, 500), // Limitar longitud
+          amount: Math.abs(raw.amount).toString(),
+          type: raw.amount >= 0 ? 'income' : 'expense',
+          category: classification.category || 'General',
+          merchant: (classification.merchant || raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido').substring(0, 200),
+          currency: detectedCurrency,
+        };
+      })
+      .filter((t): t is InsertTransaction & { currency: string } => t !== null);
     
     console.log(`Procesamiento completado: ${transactions.length} transacciones`);
     return transactions;

@@ -35,6 +35,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { getTransactions, getStats } from "@/lib/api";
+import { formatCurrency, getTransactionCurrency } from "@/lib/currency";
 
 const CHART_COLORS = [
   'hsl(221 83% 53%)',
@@ -81,6 +82,20 @@ export default function Dashboard() {
     ...cat,
     color: CHART_COLORS[idx % CHART_COLORS.length]
   }));
+
+  // Obtener la moneda más común de las transacciones, o usar MXN por defecto
+  const getMostCommonCurrency = (): string => {
+    if (!transactions || transactions.length === 0) return 'MXN';
+    const currencyCounts: Record<string, number> = {};
+    transactions.forEach(t => {
+      const currency = t.currency || 'MXN';
+      currencyCounts[currency] = (currencyCounts[currency] || 0) + 1;
+    });
+    const mostCommon = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0];
+    return mostCommon ? mostCommon[0] : 'MXN';
+  };
+
+  const defaultCurrency = getMostCommonCurrency();
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -304,7 +319,7 @@ export default function Dashboard() {
                     transaction.type === 'income' ? 'text-green-600' : 'text-gray-900'
                   }`}>
                     {transaction.type === 'income' ? '+' : '-'}
-                    {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(parseFloat(transaction.amount))}
+                    {formatCurrency(transaction.amount, getTransactionCurrency(transaction))}
                   </TableCell>
                   <TableCell>
                     <div className={`w-2 h-2 rounded-full mx-auto ${
@@ -338,7 +353,7 @@ function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor
         <div>
           <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
           <h3 className="text-2xl font-bold text-gray-900 font-heading" data-testid={`${testId}-amount`}>
-            {isPercent ? `${amount}%` : new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount)}
+            {isPercent ? `${amount}%` : formatCurrency(amount, defaultCurrency)}
           </h3>
         </div>
       </CardContent>
