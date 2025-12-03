@@ -31,19 +31,19 @@ interface ExtractedTransaction {
  */
 async function pdfToImages(buffer: Buffer): Promise<string[]> {
   try {
-    // Importar pdfjs-dist dinámicamente
-    // Intentar diferentes formas de importar según la versión
+    // Importar pdfjs-dist legacy build (recomendado para Node.js)
     let pdfjsLib: any;
     try {
-      pdfjsLib = await import('pdfjs-dist');
+      // Intentar primero con legacy build (recomendado para Node.js)
+      pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
     } catch (e) {
       try {
-        pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        pdfjsLib = await import('pdfjs-dist');
       } catch (e2) {
         // Fallback: usar require si está disponible
         const { createRequire } = await import('module');
         const require = createRequire(import.meta.url);
-        pdfjsLib = require('pdfjs-dist');
+        pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
       }
     }
     
@@ -54,7 +54,9 @@ async function pdfToImages(buffer: Buffer): Promise<string[]> {
       pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
     }
     
-    const loadingTask = pdfjsLib.getDocument({ data: buffer });
+    // Convertir Buffer a Uint8Array (pdfjs-dist requiere Uint8Array, no Buffer)
+    const uint8Array = new Uint8Array(buffer);
+    const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
     const pdf = await loadingTask.promise;
     const images: string[] = [];
     
