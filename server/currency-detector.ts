@@ -55,10 +55,17 @@ export function detectCurrencyFromText(text: string, defaultCurrency: string = '
   }
   
   // 3. Detectar por contexto geográfico y patrones
-  // México
-  if (upperText.includes('MEXICO') || upperText.includes('MÉXICO') || 
-      upperText.includes('BANAMEX') || upperText.includes('BANCOMER') ||
-      upperText.includes('BBVA') || upperText.includes('SANTANDER MEXICO')) {
+  // México - Prioridad alta (detectar primero para evitar falsos positivos de EUR)
+  const mexicoKeywords = [
+    'MEXICO', 'MÉXICO', 'MEXICAN', 'MEXICANO',
+    'BANAMEX', 'BANCOMER', 'BBVA MEXICO', 'BBVA MÉXICO',
+    'SANTANDER MEXICO', 'SANTANDER MÉXICO', 'SANTANDER MEX',
+    'BANCO AZTECA', 'AZTECA', 'BANCOPPEL', 'BANORTE',
+    'HSBC MEXICO', 'SCOTIABANK MEXICO', 'INBURSA',
+    'CIUDAD DE MEXICO', 'CDMX', 'GUADALAJARA', 'MONTERREY'
+  ];
+  
+  if (mexicoKeywords.some(keyword => upperText.includes(keyword))) {
     console.log('Moneda detectada por contexto: MXN (México)');
     return 'MXN';
   }

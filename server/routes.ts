@@ -238,6 +238,45 @@ export async function registerRoutes(
     }
   });
 
+  // Endpoint para actualizar currency de transacciones existentes
+  app.patch("/api/transactions/update-currency", async (req, res) => {
+    try {
+      const { currency = 'MXN' } = req.body;
+      const allTransactions = await storage.getAllTransactions();
+      
+      // Filtrar transacciones que necesitan actualización (sin currency, null, o EUR)
+      const transactionsToUpdate = allTransactions.filter(t => 
+        !t.currency || t.currency === 'EUR' || t.currency === null || t.currency === undefined
+      );
+      
+      if (transactionsToUpdate.length === 0) {
+        return res.json({ 
+          message: "No hay transacciones que actualizar",
+          updated: 0 
+        });
+      }
+
+      // Actualizar cada transacción
+      let updated = 0;
+      for (const transaction of transactionsToUpdate) {
+        try {
+          await storage.updateTransaction(transaction.id, { currency });
+          updated++;
+        } catch (error) {
+          console.error(`Error actualizando transacción ${transaction.id}:`, error);
+        }
+      }
+
+      res.json({ 
+        message: `${updated} transacciones actualizadas a ${currency}`,
+        updated 
+      });
+    } catch (error: any) {
+      console.error("Error actualizando currency:", error);
+      res.status(500).json({ error: "Error actualizando currency" });
+    }
+  });
+
   return httpServer;
 }
 
