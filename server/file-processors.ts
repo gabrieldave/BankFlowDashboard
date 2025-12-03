@@ -186,16 +186,33 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
       }
       
       if (transaction) {
-        // Determinar si es ingreso o gasto basado en el monto y contexto
+        // Determinar si es ingreso o gasto
         const amount = parseFloat(transaction.amount);
         
-        // Verificar si la línea original tenía signo + (abono)
-        const originalLine = i > 0 ? lines[i - 1] + ' ' + line : line;
-        const hasPlusSign = originalLine.includes('+$') || originalLine.includes('+ $') || originalLine.includes('+');
-        
-        const isIncome = detectIncome(transaction.description, amount, hasPlusSign);
-        
-        console.log(`Transacción procesada: ${isIncome ? 'INGRESO' : 'GASTO'} - ${transaction.description.substring(0, 50)} - ${amount}${hasPlusSign ? ' (con signo +)' : ''}`);
+        // Si la transacción tiene el signo explícito, usarlo directamente
+        let isIncome = false;
+        if (transaction.isPositive !== undefined) {
+          // Si tiene signo explícito en el monto, usarlo
+          isIncome = transaction.isPositive;
+          console.log(`Transacción con signo explícito: ${isIncome ? 'INGRESO' : 'GASTO'} - ${transaction.description.substring(0, 50)} - ${isIncome ? '+' : '-'}$${amount}`);
+        } else {
+          // Si no tiene signo explícito, usar la detección por descripción
+          const originalLine = i > 0 ? lines[i - 1] + ' ' + line : line;
+          const hasPlusSign = originalLine.includes('+$') || originalLine.includes('+ $') || originalLine.includes('+');
+          const hasMinusSign = originalLine.includes('-$') || originalLine.includes('- $') || (originalLine.includes('-') && !hasPlusSign);
+          
+          if (hasPlusSign) {
+            isIncome = true;
+            console.log(`Ingreso detectado por signo + en línea: ${transaction.description.substring(0, 50)}`);
+          } else if (hasMinusSign) {
+            isIncome = false;
+            console.log(`Gasto detectado por signo - en línea: ${transaction.description.substring(0, 50)}`);
+          } else {
+            // Fallback a detección por descripción
+            isIncome = detectIncome(transaction.description, amount, hasPlusSign);
+            console.log(`Transacción procesada: ${isIncome ? 'INGRESO' : 'GASTO'} - ${transaction.description.substring(0, 50)} - ${amount}`);
+          }
+        }
         
         rawTransactions.push({
           date: transaction.date,
@@ -276,7 +293,7 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
   }
 }
 
-function extractTransactionFromLine(line: string): { date: string; description: string; amount: string } | null {
+function extractTransactionFromLine(line: string): { date: string; description: string; amount: string; isPositive?: boolean } | null {
   // Patrones más flexibles para fechas
   const datePatterns = [
     /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,  // DD/MM/YYYY o DD-MM-YYYY
@@ -284,12 +301,13 @@ function extractTransactionFromLine(line: string): { date: string; description: 
     /(\d{1,2}\s+\w{3}\s+\d{2,4})/,           // DD MMM YYYY
   ];
   
-  // Patrones más flexibles para montos (incluyendo signo + para abonos)
+  // Patrones para montos con signo + o - (prioridad a estos)
   const amountPatterns = [
-    /([\+\-]?\$\s*\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/, // Con símbolo $ y posible signo +
-    /([\+\-]?\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/,  // Formato estándar con signo +
-    /([\+\-]?\d+[,\.]\d{2})/,                           // Formato simple con signo +
-    /([\+\-]?\d+\.\d{2})/,                              // Formato decimal con signo +
+    /([\+\-]\$\s*\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/, // +$ o -$ con formato mexicano
+    /([\+\-]\s*\$\s*\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/, // + $ o - $ con espacios
+    /([\+\-]\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/,  // + o - sin símbolo $
+    /([\+\-]?\$\s*\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/, // Con símbolo $ opcional
+    /([\+\-]?\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)/,  // Formato estándar
   ];
   
   let dateMatch: RegExpMatchArray | null = null;
@@ -305,13 +323,28 @@ function extractTransactionFromLine(line: string): { date: string; description: 
     return null;
   }
   
-  // Buscar montos
+  // Buscar montos (priorizar los que tienen signo explícito)
   let amountMatch: string | null = null;
+  let isPositive = false;
+  
   for (const pattern of amountPatterns) {
     const matches = line.match(new RegExp(pattern, 'g'));
     if (matches && matches.length > 0) {
-      // Tomar el último monto (generalmente es el total de la transacción)
+      // Buscar el monto con signo explícito primero
+      const signedMatch = matches.find(m => m.startsWith('+') || m.startsWith('-'));
+      if (signedMatch) {
+        amountMatch = signedMatch;
+        isPositive = signedMatch.startsWith('+');
+        break;
+      }
+      // Si no hay signo explícito, tomar el último monto
       amountMatch = matches[matches.length - 1];
+      // Verificar si tiene signo implícito (si empieza con -)
+      if (amountMatch.startsWith('-')) {
+        isPositive = false;
+      } else if (amountMatch.startsWith('+')) {
+        isPositive = true;
+      }
       break;
     }
   }
@@ -322,11 +355,16 @@ function extractTransactionFromLine(line: string): { date: string; description: 
   
   const date = normalizeDate(dateMatch[1]);
   
-  // Limpiar el monto (preservar signo + para detectar abonos)
+  // Detectar signo del monto antes de limpiarlo
+  const hasPlusSign = amountMatch.includes('+') || amountMatch.startsWith('+');
+  const hasMinusSign = amountMatch.includes('-') || amountMatch.startsWith('-');
+  
+  // Limpiar el monto
   let amountStr = amountMatch
     .replace(/\$/g, '')
     .replace(/\s+/g, '')
-    .replace(/\+/g, '')  // Remover + para parseFloat, pero ya lo detectamos antes
+    .replace(/\+/g, '')  // Remover + para parseFloat
+    .replace(/\-/g, '')  // Remover - para parseFloat (lo manejamos con isPositive)
     .replace(/\./g, (match: string, offset: number, string: string) => {
       // Si hay múltiples puntos, mantener solo el último como decimal
       const after = string.substring(offset + 1);
@@ -340,14 +378,20 @@ function extractTransactionFromLine(line: string): { date: string; description: 
     return null;
   }
   
+  // Determinar si es positivo basado en el signo encontrado
+  if (hasPlusSign) {
+    isPositive = true;
+  } else if (hasMinusSign) {
+    isPositive = false;
+  }
+  
   // Extraer descripción (todo excepto fecha y monto)
-  // Mantener más información para detectar mejor los abonos
   let description = line
     .replace(dateMatch[0], '')
     .replace(amountMatch, '')
     .trim();
   
-  // Limpiar pero mantener guiones y algunos caracteres importantes para detectar "Abono - Transferencia"
+  // Limpiar pero mantener guiones y algunos caracteres importantes
   description = description
     .replace(/\s+/g, ' ')  // Normalizar espacios
     .trim()
@@ -358,12 +402,13 @@ function extractTransactionFromLine(line: string): { date: string; description: 
   }
   
   // Log para debugging
-  console.log(`Transacción extraída: ${date} | ${description.substring(0, 60)} | ${amount}`);
+  console.log(`Transacción extraída: ${date} | ${description.substring(0, 60)} | ${isPositive ? '+' : '-'}$${amount}`);
   
   return {
     date,
     description,
-    amount: Math.abs(amount).toString(),
+    amount: amount.toString(),
+    isPositive,
   };
 }
 
