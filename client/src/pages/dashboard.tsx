@@ -126,6 +126,7 @@ export default function Dashboard() {
           color="text-primary"
           bgColor="bg-blue-50"
           testId="card-balance"
+          currency={defaultCurrency}
         />
         <SummaryCard 
           title="Ingresos" 
@@ -136,6 +137,7 @@ export default function Dashboard() {
           color="text-green-600"
           bgColor="bg-green-50"
           testId="card-income"
+          currency={defaultCurrency}
         />
         <SummaryCard 
           title="Gastos" 
@@ -146,6 +148,7 @@ export default function Dashboard() {
           color="text-red-600"
           bgColor="bg-red-50"
           testId="card-expenses"
+          currency={defaultCurrency}
         />
         <SummaryCard 
           title="Tasa de Ahorro" 
@@ -157,6 +160,7 @@ export default function Dashboard() {
           color="text-purple-600"
           bgColor="bg-purple-50"
           testId="card-savings"
+          currency={defaultCurrency}
         />
       </div>
 
@@ -336,7 +340,7 @@ export default function Dashboard() {
   );
 }
 
-function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor, isPercent = false, testId }: any) {
+function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor, isPercent = false, testId, currency = 'MXN' }: any) {
   return (
     <Card className="border-none shadow-sm hover:shadow-md transition-all duration-200" data-testid={testId}>
       <CardContent className="p-6">
@@ -353,7 +357,7 @@ function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor
         <div>
           <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
           <h3 className="text-2xl font-bold text-gray-900 font-heading" data-testid={`${testId}-amount`}>
-            {isPercent ? `${amount}%` : formatCurrency(amount, defaultCurrency)}
+            {isPercent ? `${amount}%` : formatCurrency(amount, currency)}
           </h3>
         </div>
       </CardContent>
