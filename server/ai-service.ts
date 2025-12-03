@@ -19,24 +19,47 @@ export interface TransactionClassification {
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_API_KEY = (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY) || '';
 
-// Categorías principales que queremos detectar
+// Categorías principales que queremos detectar (expandidas para mejor clasificación)
 const CATEGORIES = [
+  // Ingresos
+  'Salario',
+  'Freelance',
+  'Transferencias',
+  'Inversiones',
+  'Devoluciones',
+  'Cashback',
+  
+  // Gastos esenciales
   'Alimentación',
   'Restaurantes',
   'Transporte',
-  'Entretenimiento',
-  'Compras Online',
-  'Amazon',
-  'MercadoLibre',
-  'Salud',
   'Vivienda',
   'Servicios',
+  'Salud',
   'Educación',
+  
+  // Compras
+  'Amazon',
+  'MercadoLibre',
+  'Compras Online',
   'Ropa',
   'Tecnología',
-  'Salario',
-  'Transferencias',
-  'Inversiones',
+  'Electrónica',
+  'Hogar',
+  
+  // Entretenimiento y estilo de vida
+  'Entretenimiento',
+  'Streaming',
+  'Gimnasio',
+  'Viajes',
+  'Turismo',
+  
+  // Finanzas
+  'Tarjetas',
+  'Comisiones',
+  'Préstamos',
+  
+  // General (fallback)
   'General'
 ];
 
@@ -196,9 +219,15 @@ Reglas importantes:
 - Si menciona "MERCADOLIBRE", "MERCADO LIBRE", "ML" → categoría "MercadoLibre"
 - Si menciona supermercados, comida, alimentos → categoría "Alimentación"
 - Si menciona restaurantes, comida rápida → categoría "Restaurantes"
-- Si el monto es positivo y grande, probablemente es "Salario" o "Transferencias"
-- Extrae el nombre del comercio de la descripción
-- confidence debe ser entre 0 y 1`;
+- Si menciona "NETFLIX", "SPOTIFY", "DISNEY", "HBO" → categoría "Streaming"
+- Si menciona "UBER", "DIDI", "CABIFY", "RAPPI" → categoría "Transporte"
+- Si menciona "STRIPE", "PAYPAL", "MERCADO PAGO" → categoría "Transferencias"
+- Si el monto es positivo y grande (>5000), probablemente es "Salario", "Freelance" o "Transferencias"
+- Si menciona "CASHBACK" o "DEVOLUCIÓN" → categoría correspondiente
+- Si menciona suscripciones recurrentes → categoría específica (Streaming, Gimnasio, etc.)
+- Extrae el nombre del comercio de la descripción (limpio, sin códigos)
+- confidence debe ser entre 0 y 1
+- Usa subcategorías cuando sea relevante (ej: "Restaurantes - Comida Rápida")`;
 }
 
 function buildBatchClassificationPrompt(

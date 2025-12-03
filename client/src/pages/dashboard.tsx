@@ -8,7 +8,9 @@ import {
   Search,
   Filter,
   Download,
-  Loader2
+  Loader2,
+  Info,
+  X
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -27,6 +29,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Table, 
   TableBody, 
@@ -50,6 +60,8 @@ const CHART_COLORS = [
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
   
   const { data: transactions, isLoading: loadingTransactions } = useQuery({
     queryKey: ['transactions'],
@@ -61,11 +73,28 @@ export default function Dashboard() {
     queryFn: getStats,
   });
 
+  // Obtener categorías únicas para el filtro
+  const availableCategories = useMemo(() => {
+    if (!transactions) return [];
+    const categories = new Set(transactions.map(t => t.category));
+    return Array.from(categories).sort();
+  }, [transactions]);
+
   // Filtrar y ordenar transacciones
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
     
     let filtered = [...transactions];
+    
+    // Filtrar por tipo
+    if (filterType !== 'all') {
+      filtered = filtered.filter(t => t.type === filterType);
+    }
+    
+    // Filtrar por categoría
+    if (filterCategory !== 'all') {
+      filtered = filtered.filter(t => t.category === filterCategory);
+    }
     
     // Aplicar búsqueda
     if (searchQuery.trim()) {
@@ -86,7 +115,7 @@ export default function Dashboard() {
     });
     
     return filtered;
-  }, [transactions, searchQuery]);
+  }, [transactions, searchQuery, filterType, filterCategory]);
 
   if (loadingTransactions || loadingStats) {
     return (
@@ -168,6 +197,7 @@ export default function Dashboard() {
           amount={stats.monthlyIncome} 
           trend="+12%" 
           trendUp={true}
+          trendExplanation="Los ingresos aumentaron un 12% comparado con el mes anterior. Esto indica un crecimiento positivo en tus entradas de dinero."
           icon={ArrowUpRight}
           color="text-green-600"
           bgColor="bg-green-50"
@@ -178,7 +208,8 @@ export default function Dashboard() {
           title="Gastos" 
           amount={stats.monthlyExpenses} 
           trend="-5%" 
-          trendUp={true}
+          trendUp={false}
+          trendExplanation="Los gastos disminuyeron un 5% comparado con el mes anterior. Esto es positivo ya que estás gastando menos."
           icon={ArrowDownRight}
           color="text-red-600"
           bgColor="bg-red-50"
@@ -191,6 +222,7 @@ export default function Dashboard() {
           isPercent={true}
           trend="+4.2%" 
           trendUp={true}
+          trendExplanation={`Tu tasa de ahorro es del ${stats.savingsRate}%. Esto significa que ahorras ${stats.savingsRate}% de tus ingresos después de cubrir todos tus gastos.`}
           icon={TrendingUp}
           color="text-purple-600"
           bgColor="bg-purple-50"
@@ -313,20 +345,52 @@ export default function Dashboard() {
               </span>
             )}
           </CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar..." 
+                placeholder="Buscar por descripción..." 
                 className="pl-9 h-9 w-[200px] bg-gray-50 border-gray-200 focus-visible:ring-primary/20" 
                 data-testid="input-search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button variant="outline" size="icon" className="h-9 w-9 border-gray-200" data-testid="button-filter">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-            </Button>
+            <Select value={filterType} onValueChange={(value: 'all' | 'income' | 'expense') => setFilterType(value)}>
+              <SelectTrigger className="h-9 w-[140px] bg-gray-50 border-gray-200">
+                <SelectValue placeholder="Tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="income">Solo Ingresos</SelectItem>
+                <SelectItem value="expense">Solo Gastos</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="h-9 w-[160px] bg-gray-50 border-gray-200">
+                <SelectValue placeholder="Categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {availableCategories.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(filterType !== 'all' || filterCategory !== 'all' || searchQuery) && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-9 w-9"
+                onClick={() => {
+                  setFilterType('all');
+                  setFilterCategory('all');
+                  setSearchQuery('');
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -394,7 +458,7 @@ export default function Dashboard() {
   );
 }
 
-function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor, isPercent = false, testId, currency = 'MXN' }: any) {
+function SummaryCard({ title, amount, trend, trendUp, trendExplanation, icon: Icon, color, bgColor, isPercent = false, testId, currency = 'MXN' }: any) {
   return (
     <Card className="border-none shadow-sm hover:shadow-md transition-all duration-200" data-testid={testId}>
       <CardContent className="p-6">
@@ -402,11 +466,27 @@ function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor
           <div className={`p-3 rounded-xl ${bgColor}`}>
             <Icon className={`h-5 w-5 ${color}`} />
           </div>
-          <Badge variant={trendUp ? "default" : "destructive"} className={`${
-            trendUp ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"
-          } border-0`}>
-            {trend}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant={trendUp ? "default" : "destructive"} className={`${
+              trendUp ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"
+            } border-0`}>
+              {trend}
+            </Badge>
+            {trendExplanation && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-muted-foreground hover:text-foreground transition-colors">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[250px]">
+                    <p className="text-xs">{trendExplanation}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </div>
         <div>
           <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
