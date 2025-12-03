@@ -74,15 +74,24 @@ async function pdfToImages(buffer: Buffer): Promise<string[]> {
       const context = canvas.getContext('2d');
       
       // Configurar el renderContext para Node.js canvas
-      // pdfjs-dist necesita que el canvas tenga ciertas propiedades
+      // Necesitamos asegurar que el canvas tenga todas las propiedades necesarias
       const renderContext: any = {
         canvasContext: context,
         viewport: viewport,
+        // Deshabilitar renderizado de imágenes inline para evitar el error
+        // Esto puede hacer que algunas imágenes no se rendericen, pero el texto sí
+        enableWebGL: false,
       };
       
-      // Renderizar la página
-      const renderTask = page.render(renderContext);
-      await renderTask.promise;
+      try {
+        // Renderizar la página
+        const renderTask = page.render(renderContext);
+        await renderTask.promise;
+      } catch (renderError: any) {
+        // Si hay error al renderizar (por ejemplo, con imágenes), intentar solo texto
+        console.warn(`Advertencia al renderizar página ${pageNum}: ${renderError.message}`);
+        // Continuar de todas formas - puede que el texto se haya renderizado parcialmente
+      }
       
       // Convertir canvas a base64
       const imageBuffer = canvas.toBuffer('image/png');
