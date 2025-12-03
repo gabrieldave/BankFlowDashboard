@@ -33,13 +33,33 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { getStats } from "@/lib/api";
+import { getStats, getTransactions } from "@/lib/api";
+import { formatCurrency, getTransactionCurrency } from "@/lib/currency";
 
 export default function Analytics() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['stats'],
     queryFn: getStats,
   });
+
+  const { data: transactions } = useQuery({
+    queryKey: ['transactions'],
+    queryFn: getTransactions,
+  });
+
+  // Obtener la moneda más común de las transacciones
+  const getMostCommonCurrency = (): string => {
+    if (!transactions || transactions.length === 0) return 'MXN';
+    const currencyCounts: Record<string, number> = {};
+    transactions.forEach(t => {
+      const currency = t.currency || 'MXN';
+      currencyCounts[currency] = (currencyCounts[currency] || 0) + 1;
+    });
+    const mostCommon = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0];
+    return mostCommon ? mostCommon[0] : 'MXN';
+  };
+
+  const defaultCurrency = getMostCommonCurrency();
 
   if (isLoading) {
     return (
@@ -114,11 +134,7 @@ export default function Analytics() {
               <DollarSign className="h-4 w-4 text-primary" />
             </div>
             <h3 className="text-2xl font-bold text-gray-900">
-              {new Intl.NumberFormat('es-ES', { 
-                style: 'currency', 
-                currency: 'EUR',
-                maximumFractionDigits: 0 
-              }).format(stats.avgTransactionAmount || 0)}
+              {formatCurrency(stats.avgTransactionAmount || 0, defaultCurrency)}
             </h3>
             <p className="text-xs text-muted-foreground mt-1">por transacción</p>
           </CardContent>
@@ -218,11 +234,7 @@ export default function Analytics() {
                       </div>
                     </div>
                     <p className="font-semibold text-gray-900">
-                      {new Intl.NumberFormat('es-ES', { 
-                        style: 'currency', 
-                        currency: 'EUR',
-                        maximumFractionDigits: 0 
-                      }).format(merchant.value)}
+                      {formatCurrency(merchant.value, defaultCurrency)}
                     </p>
                   </div>
                 ))}
@@ -252,10 +264,7 @@ export default function Analytics() {
                       </Badge>
                     </div>
                     <p className="font-bold text-red-600 ml-4">
-                      {new Intl.NumberFormat('es-ES', { 
-                        style: 'currency', 
-                        currency: 'EUR' 
-                      }).format(expense.amount)}
+                      {formatCurrency(expense.amount, defaultCurrency)}
                     </p>
                   </div>
                 ))}
@@ -298,10 +307,7 @@ export default function Analytics() {
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
                     }}
                     formatter={(value: number) => 
-                      new Intl.NumberFormat('es-ES', { 
-                        style: 'currency', 
-                        currency: 'EUR' 
-                      }).format(value)
+                      formatCurrency(value, defaultCurrency)
                     }
                   />
                   <Bar 

@@ -446,16 +446,30 @@ function extractTransactionFromLine(line: string): { date: string; description: 
     .replace(amountMatch, '')
     .trim();
   
-  // Limpiar pero mantener guiones y algunos caracteres importantes
+  // Limpiar patrones comunes de metadatos que no son parte de la descripción real
   description = description
+    .replace(/Fecha\s+hora\s*:?\s*\d{1,2}:\d{2}:\d{2}/gi, '')  // Remover "Fecha hora: HH:MM:SS"
+    .replace(/Fecha\s+y\s+hora\s*:?\s*\d{1,2}:\d{2}:\d{2}/gi, '')  // Remover "Fecha y hora: HH:MM:SS"
+    .replace(/Fecha\s+generaci[oó]n\s*:?\s*\d{1,2}:\d{2}:\d{2}/gi, '')  // Remover "Fecha generación: HH:MM:SS"
+    .replace(/Fecha\s+de\s+generaci[oó]n\s*:?\s*\d{1,2}:\d{2}:\d{2}/gi, '')  // Remover "Fecha de generación: HH:MM:SS"
+    .replace(/Comisi[oó]n\s+\d+\.?\d*\s*Fecha/gi, '')  // Remover "Comisión X.XX Fecha"
+    .replace(/^\s*Fecha\s*/gi, '')  // Remover "Fecha" al inicio
     .replace(/\s+/g, ' ')  // Normalizar espacios
-    .trim()
-    .slice(0, 500);  // Permitir descripciones más largas
+    .trim();
   
-  if (!description || description.length < 3) {
-    console.warn(`Descripción muy corta o vacía en línea: ${line.substring(0, 100)}`);
-    return null;
+  // Si después de limpiar solo quedan números o caracteres especiales, intentar extraer mejor
+  if (!description || description.length < 3 || /^[\d\s\-:\.]+$/.test(description)) {
+    // Intentar extraer la descripción de otra manera - buscar texto antes de la fecha
+    const beforeDate = line.substring(0, line.indexOf(dateMatch[0])).trim();
+    if (beforeDate && beforeDate.length >= 3 && !/^[\d\s\-:\.]+$/.test(beforeDate)) {
+      description = beforeDate;
+    } else {
+      console.warn(`Descripción muy corta o inválida en línea: ${line.substring(0, 100)}`);
+      return null;
+    }
   }
+  
+  description = description.slice(0, 500);  // Limitar longitud
   
   // Log detallado para debugging
   console.log(`Transacción extraída: ${date} | ${description.substring(0, 60)} | ${isPositive ? '+' : '-'}$${amount.toFixed(2)} | amountMatch="${amountMatch}" | amountStr="${amountStr}"`);
