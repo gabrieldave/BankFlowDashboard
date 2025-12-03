@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -48,6 +49,8 @@ const CHART_COLORS = [
 ];
 
 export default function Dashboard() {
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const { data: transactions, isLoading: loadingTransactions } = useQuery({
     queryKey: ['transactions'],
     queryFn: getTransactions,
@@ -57,6 +60,33 @@ export default function Dashboard() {
     queryKey: ['stats'],
     queryFn: getStats,
   });
+
+  // Filtrar y ordenar transacciones
+  const filteredTransactions = useMemo(() => {
+    if (!transactions) return [];
+    
+    let filtered = [...transactions];
+    
+    // Aplicar búsqueda
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(t => 
+        t.description.toLowerCase().includes(query) ||
+        t.merchant.toLowerCase().includes(query) ||
+        t.category.toLowerCase().includes(query) ||
+        t.amount.includes(query)
+      );
+    }
+    
+    // Ordenar por fecha (más recientes primero)
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA;
+    });
+    
+    return filtered;
+  }, [transactions, searchQuery]);
 
   if (loadingTransactions || loadingStats) {
     return (
@@ -102,7 +132,9 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-heading font-bold text-gray-900" data-testid="text-dashboard-title">Panel Financiero</h1>
-          <p className="text-muted-foreground">Resumen de tus finanzas basado en {transactions.length} transacciones.</p>
+          <p className="text-muted-foreground">
+            Resumen de tus finanzas basado en {transactions.length} {transactions.length === 1 ? 'transacción' : 'transacciones'}.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" data-testid="button-export">
@@ -270,7 +302,14 @@ export default function Dashboard() {
 
       <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between bg-white border-b border-gray-50 pb-4">
-          <CardTitle className="font-heading text-lg">Transacciones Recientes</CardTitle>
+          <CardTitle className="font-heading text-lg">
+            Todas las Transacciones
+            {filteredTransactions.length !== transactions?.length && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({filteredTransactions.length} de {transactions?.length || 0})
+              </span>
+            )}
+          </CardTitle>
           <div className="flex gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -278,6 +317,8 @@ export default function Dashboard() {
                 placeholder="Buscar..." 
                 className="pl-9 h-9 w-[200px] bg-gray-50 border-gray-200 focus-visible:ring-primary/20" 
                 data-testid="input-search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <Button variant="outline" size="icon" className="h-9 w-9 border-gray-200" data-testid="button-filter">
@@ -286,18 +327,26 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-gray-50/50">
-              <TableRow>
-                <TableHead className="w-[100px]">Fecha</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead className="text-right">Monto</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.slice(0, 15).map((transaction) => (
+          <div className="max-h-[600px] overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-gray-50/50 sticky top-0 z-10">
+                <TableRow>
+                  <TableHead className="w-[100px]">Fecha</TableHead>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead className="text-right">Monto</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTransactions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      {searchQuery ? 'No se encontraron transacciones que coincidan con la búsqueda' : 'No hay transacciones disponibles'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredTransactions.map((transaction) => (
                 <TableRow key={transaction.id} className="hover:bg-slate-50/50 transition-colors" data-testid={`row-transaction-${transaction.id}`}>
                   <TableCell className="font-medium text-muted-foreground text-xs">
                     {(() => {
@@ -331,9 +380,11 @@ export default function Dashboard() {
                     }`} />
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
