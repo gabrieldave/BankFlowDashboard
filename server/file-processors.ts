@@ -11,14 +11,36 @@ async function getPdfParser() {
     try {
       // Intentar usar pdf-parse con configuración para Node.js
       const pdfParseModule = await import("pdf-parse");
-      pdfParse = (pdfParseModule as any).default || pdfParseModule;
+      
+      // pdf-parse puede exportarse de diferentes formas dependiendo de la versión
+      // Intentar múltiples formas de acceso
+      if (typeof pdfParseModule === 'function') {
+        pdfParse = pdfParseModule;
+      } else if (pdfParseModule.default && typeof pdfParseModule.default === 'function') {
+        pdfParse = pdfParseModule.default;
+      } else if ((pdfParseModule as any).pdfParse && typeof (pdfParseModule as any).pdfParse === 'function') {
+        pdfParse = (pdfParseModule as any).pdfParse;
+      } else if (typeof (pdfParseModule as any) === 'function') {
+        pdfParse = pdfParseModule as any;
+      } else {
+        // Último intento: buscar cualquier propiedad que sea una función
+        const keys = Object.keys(pdfParseModule);
+        const funcKey = keys.find(key => typeof (pdfParseModule as any)[key] === 'function');
+        if (funcKey) {
+          pdfParse = (pdfParseModule as any)[funcKey];
+        } else {
+          throw new Error('pdf-parse no se cargó correctamente: no se encontró la función de parseo');
+        }
+      }
       
       // Verificar que la función esté disponible
       if (typeof pdfParse !== 'function') {
-        throw new Error('pdf-parse no se cargó correctamente');
+        console.error('Estructura del módulo pdf-parse:', Object.keys(pdfParseModule));
+        throw new Error('pdf-parse no se cargó correctamente: el módulo no exporta una función');
       }
     } catch (importError: any) {
       console.error('Error importando pdf-parse:', importError);
+      console.error('Stack trace:', importError.stack);
       // Si falla, intentar con una alternativa
       throw new Error(`Error cargando pdf-parse: ${importError.message}. Ejecuta: npm install pdf-parse`);
     }
