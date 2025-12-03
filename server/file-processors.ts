@@ -123,20 +123,30 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
 
 export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
   // Intentar primero con DeepSeek Vision si está disponible
+  // Leer la API key en tiempo de ejecución, no al importar el módulo
   const DEEPSEEK_API_KEY = (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY) || '';
   const USE_VISION = true; // Activado para usar IA en extracción
+  
+  console.log(`[PDF Parser] USE_VISION: ${USE_VISION}, API_KEY presente: ${DEEPSEEK_API_KEY ? 'SÍ (' + DEEPSEEK_API_KEY.substring(0, 10) + '...)' : 'NO'}`);
   
   if (USE_VISION && DEEPSEEK_API_KEY) {
     try {
       console.log('Intentando procesar PDF con DeepSeek Vision API...');
       const { parsePDFWithVision } = await import('./pdf-vision-service');
-      return await parsePDFWithVision(buffer);
+      const result = await parsePDFWithVision(buffer);
+      console.log(`[PDF Parser] Vision API exitoso, ${result.length} transacciones extraídas`);
+      return result;
     } catch (visionError: any) {
-      console.warn('Error con DeepSeek Vision, usando método tradicional:', visionError.message);
+      console.error('Error con DeepSeek Vision, usando método tradicional:', visionError.message);
+      console.error('Stack trace:', visionError.stack);
       // Continuar con el método tradicional como fallback
     }
   } else {
-    console.log('Usando método tradicional de extracción (Vision deshabilitado temporalmente)');
+    if (!USE_VISION) {
+      console.log('Usando método tradicional de extracción (Vision deshabilitado)');
+    } else {
+      console.log('Usando método tradicional de extracción (DEEPSEEK_API_KEY no configurada)');
+    }
   }
 
   // Método tradicional (fallback)

@@ -13,7 +13,11 @@ declare const process: {
 };
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const DEEPSEEK_API_KEY = (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY) || '';
+
+// Función para obtener la API key en tiempo de ejecución
+function getDeepSeekApiKey(): string {
+  return (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY) || '';
+}
 
 interface ExtractedTransaction {
   date: string;
@@ -93,6 +97,7 @@ async function extractTransactionsFromImage(
   pageNumber: number,
   totalPages: number
 ): Promise<ExtractedTransaction[]> {
+  const DEEPSEEK_API_KEY = getDeepSeekApiKey();
   if (!DEEPSEEK_API_KEY) {
     throw new Error('DEEPSEEK_API_KEY no configurada. No se puede usar visión.');
   }
@@ -251,9 +256,12 @@ IMPORTANTE:
  * Convierte cada página a imagen y extrae transacciones con IA
  */
 export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransaction[]> {
+  const DEEPSEEK_API_KEY = getDeepSeekApiKey();
   if (!DEEPSEEK_API_KEY) {
     throw new Error('DEEPSEEK_API_KEY no configurada. No se puede usar visión. Usa el método tradicional.');
   }
+  
+  console.log(`[Vision Service] API Key detectada: ${DEEPSEEK_API_KEY.substring(0, 10)}...`);
 
   console.log('Iniciando procesamiento de PDF con DeepSeek Vision API...');
   console.log('Tamaño del buffer:', buffer.length, 'bytes');
