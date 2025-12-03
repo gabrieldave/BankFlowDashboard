@@ -58,3 +58,5 @@ const USE_VISION = false; // Deshabilitado temporalmente para debugging
 - El método tradicional tiene mejor logging para identificar problemas
 - Una vez que identifiquemos el problema, reactivaremos Vision
 
+
+

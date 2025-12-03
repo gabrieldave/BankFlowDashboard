@@ -1,8 +1,5 @@
-import { type User, type InsertUser, type Transaction, type InsertTransaction, users, transactions } from "@shared/schema";
+import { type User, type InsertUser, type Transaction, type InsertTransaction } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -99,68 +96,356 @@ export class MemStorage implements IStorage {
   }
 }
 
-export class DatabaseStorage implements IStorage {
-  private db;
+export class PocketBaseStorage implements IStorage {
+  private baseUrl: string;
+  private adminToken: string | null = null;
 
   constructor() {
-    const sql = neon(process.env.DATABASE_URL!);
-    this.db = drizzle(sql);
+    this.baseUrl = process.env.POCKETBASE_URL || "";
+    if (!this.baseUrl) {
+      throw new Error("POCKETBASE_URL no está configurada");
+    }
+    // Usar la URL exactamente como está configurada - NO remover nada
+    // Solo remover trailing slash si existe (excepto si termina en /_/)
+    if (this.baseUrl.endsWith("/") && !this.baseUrl.endsWith("/_/")) {
+      this.baseUrl = this.baseUrl.slice(0, -1);
+    }
+  }
+
+  private async authenticateAdmin(): Promise<void> {
+    if (this.adminToken) return;
+
+    const adminEmail = process.env.POCKETBASE_ADMIN_EMAIL;
+    const adminPassword = process.env.POCKETBASE_ADMIN_PASSWORD;
+
+    if (!adminEmail || !adminPassword) {
+      // Si no hay credenciales de admin, intentamos sin autenticación
+      // (asumiendo que las colecciones son públicas o usan reglas de acceso)
+      return;
+    }
+
+    try {
+      // Configurar para ignorar certificados SSL si es necesario
+      if (typeof process !== "undefined" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "1") {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+      }
+
+      // Intentar diferentes endpoints de autenticación
+      const authEndpoints = [
+        "/api/admins/auth-with-password",
+        "/api/admins/auth",
+        "/api/auth/admins/with-password",
+      ];
+
+      for (const endpoint of authEndpoints) {
+        try {
+          const response = await fetch(`${this.baseUrl}${endpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              identity: adminEmail,
+              password: adminPassword,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            this.adminToken = data.token;
+            return;
+          }
+        } catch (e) {
+          // Continuar con el siguiente endpoint
+        }
+      }
+
+      console.warn("No se pudo autenticar como admin, continuando sin autenticación");
+    } catch (error) {
+      console.warn("Error al autenticar admin:", error);
+      // Continuar sin autenticación, las colecciones podrían ser públicas
+    }
+  }
+
+  private async request(
+    method: string,
+    endpoint: string,
+    body?: any
+  ): Promise<any> {
+    await this.authenticateAdmin();
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (this.adminToken) {
+      headers["Authorization"] = `Bearer ${this.adminToken}`;
+    }
+
+    // Configurar para ignorar certificados SSL si es necesario
+    if (typeof process !== "undefined" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "1") {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    }
+
+    // Si la URL base termina en /_/, removerlo para los endpoints de API
+    // (/_/ es solo para el panel web, la API está en la raíz)
+    let apiUrl = this.baseUrl;
+    if (apiUrl.endsWith("/_/")) {
+      apiUrl = apiUrl.replace("/_/", "/");
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `PocketBase error: ${response.status} ${response.statusText}`;
+        try {
+          const error = JSON.parse(errorText);
+          errorMessage = `PocketBase error: ${error.message || errorMessage}`;
+        } catch {
+          errorMessage = `PocketBase error: ${errorText || errorMessage}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      if (error.message.includes("fetch failed") || error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
+        throw new Error(`No se pudo conectar a PocketBase en ${this.baseUrl}. Verifica que el servidor esté accesible.`);
+      }
+      throw error;
+    }
   }
 
   async getUser(id: string): Promise<User | undefined> {
-    const result = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
+    try {
+      const data = await this.request("GET", `/api/collections/users/records/${id}`);
+      return {
+        id: data.id,
+        username: data.username,
+        password: data.password,
+      };
+    } catch (error: any) {
+      if (error.message.includes("404") || error.message.includes("Not found")) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await this.db.select().from(users).where(eq(users.username, username)).limit(1);
-    return result[0];
+    try {
+      const data = await this.request(
+        "GET",
+        `/api/collections/users/records?filter=(username='${username}')&perPage=1`
+      );
+      if (data.items && data.items.length > 0) {
+        const item = data.items[0];
+        return {
+          id: item.id,
+          username: item.username,
+          password: item.password,
+        };
+      }
+      return undefined;
+    } catch (error: any) {
+      if (error.message.includes("404") || error.message.includes("Not found")) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const result = await this.db.insert(users).values(insertUser).returning();
-    return result[0];
+    const data = await this.request("POST", "/api/collections/users/records", insertUser);
+    return {
+      id: data.id,
+      username: data.username,
+      password: data.password,
+    };
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
-    return await this.db.select().from(transactions).orderBy(desc(transactions.createdAt));
+    const data = await this.request(
+      "GET",
+      "/api/collections/transactions/records?sort=-created_at&perPage=500"
+    );
+    return (data.items || []).map((item: any, index: number) => ({
+      // Usar un hash del ID de PocketBase para generar un número único
+      // o usar el índice si el ID no es numérico
+      id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
+      date: item.date,
+      description: item.description,
+      amount: item.amount,
+      type: item.type,
+      category: item.category,
+      merchant: item.merchant,
+      currency: item.currency || "MXN",
+      createdAt: item.created ? new Date(item.created) : new Date(),
+    }));
+  }
+
+  private hashStringToNumber(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
-    const result = await this.db.select().from(transactions).where(eq(transactions.id, id)).limit(1);
-    return result[0];
+    try {
+      // Buscar por id_number si existe, o buscar todas y filtrar
+      const data = await this.request(
+        "GET",
+        `/api/collections/transactions/records?filter=(id_number=${id})&perPage=1`
+      );
+      if (data.items && data.items.length > 0) {
+        const item = data.items[0];
+        return {
+          id: item.id_number || this.hashStringToNumber(item.id) || id,
+          date: item.date,
+          description: item.description,
+          amount: item.amount,
+          type: item.type,
+          category: item.category,
+          merchant: item.merchant,
+          currency: item.currency || "MXN",
+          createdAt: item.created ? new Date(item.created) : new Date(),
+        };
+      }
+      return undefined;
+    } catch (error: any) {
+      if (error.message.includes("404") || error.message.includes("Not found")) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
-    const result = await this.db.insert(transactions).values(transaction).returning();
-    return result[0];
+    // Obtener el máximo id_number para generar el siguiente
+    let nextId = 1;
+    try {
+      const existingData = await this.request(
+        "GET",
+        "/api/collections/transactions/records?sort=-id_number&perPage=1"
+      );
+      if (existingData.items && existingData.items.length > 0 && existingData.items[0].id_number) {
+        nextId = existingData.items[0].id_number + 1;
+      }
+    } catch (error) {
+      // Si falla, empezamos desde 1
+    }
+
+    const data = await this.request(
+      "POST",
+      "/api/collections/transactions/records",
+      {
+        ...transaction,
+        id_number: nextId,
+      }
+    );
+    return {
+      id: data.id_number || this.hashStringToNumber(data.id) || nextId,
+      date: data.date,
+      description: data.description,
+      amount: data.amount,
+      type: data.type,
+      category: data.category,
+      merchant: data.merchant,
+      currency: data.currency || "MXN",
+      createdAt: data.created ? new Date(data.created) : new Date(),
+    };
   }
 
   async createTransactions(transactionsToInsert: InsertTransaction[]): Promise<Transaction[]> {
     if (transactionsToInsert.length === 0) return [];
-    const result = await this.db.insert(transactions).values(transactionsToInsert).returning();
-    return result;
+
+    // PocketBase no tiene bulk insert nativo, así que hacemos múltiples requests
+    // o podemos usar un endpoint personalizado si existe
+    const results: Transaction[] = [];
+    for (const transaction of transactionsToInsert) {
+      const result = await this.createTransaction(transaction);
+      results.push(result);
+    }
+    return results;
   }
 
   async updateTransaction(id: number, updates: Partial<InsertTransaction>): Promise<Transaction> {
-    const result = await this.db
-      .update(transactions)
-      .set(updates)
-      .where(eq(transactions.id, id))
-      .returning();
-    if (result.length === 0) {
+    // Primero buscar el registro por id_number
+    const searchData = await this.request(
+      "GET",
+      `/api/collections/transactions/records?filter=(id_number=${id})&perPage=1`
+    );
+    if (!searchData.items || searchData.items.length === 0) {
       throw new Error(`Transaction ${id} not found`);
     }
-    return result[0];
+    const recordId = searchData.items[0].id;
+    
+    const data = await this.request(
+      "PATCH",
+      `/api/collections/transactions/records/${recordId}`,
+      updates
+    );
+    return {
+      id: data.id_number || this.hashStringToNumber(data.id) || id,
+      date: data.date,
+      description: data.description,
+      amount: data.amount,
+      type: data.type,
+      category: data.category,
+      merchant: data.merchant,
+      currency: data.currency || "MXN",
+      createdAt: data.created ? new Date(data.created) : new Date(),
+    };
   }
 
   async deleteTransaction(id: number): Promise<void> {
-    await this.db.delete(transactions).where(eq(transactions.id, id));
+    // Buscar el registro por id_number
+    const searchData = await this.request(
+      "GET",
+      `/api/collections/transactions/records?filter=(id_number=${id})&perPage=1`
+    );
+    if (!searchData.items || searchData.items.length === 0) {
+      throw new Error(`Transaction ${id} not found`);
+    }
+    const recordId = searchData.items[0].id;
+    await this.request("DELETE", `/api/collections/transactions/records/${recordId}`);
   }
 
   async deleteAllTransactions(): Promise<void> {
-    await this.db.delete(transactions);
+    // Obtener todos los IDs y eliminarlos
+    let page = 1;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const data = await this.request(
+        "GET",
+        `/api/collections/transactions/records?perPage=500&page=${page}`
+      );
+      const items = data.items || [];
+      
+      if (items.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      for (const item of items) {
+        await this.request("DELETE", `/api/collections/transactions/records/${item.id}`);
+      }
+      
+      hasMore = items.length === 500;
+      page++;
+    }
   }
 }
 
-export const storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
+export const storage = process.env.POCKETBASE_URL 
+  ? new PocketBaseStorage() 
+  : new MemStorage();
