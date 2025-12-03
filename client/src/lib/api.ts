@@ -83,24 +83,35 @@ export async function deleteAllTransactions(): Promise<void> {
   }
 }
 
-export async function updateTransactionsCurrency(currency: string = 'MXN'): Promise<{ message: string; updated: number }> {
+export async function updateTransactionsCurrency(currency: string = 'MXN', updateAll: boolean = true): Promise<{ message: string; updated: number; errors?: number }> {
   const response = await fetch('/api/transactions/update-currency', {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ currency }),
+    body: JSON.stringify({ currency, updateAll }),
   });
 
   if (!response.ok) {
     // Intentar parsear como JSON, si falla, usar el texto
     let errorMessage = 'Error actualizando currency';
-    try {
-      const error = await response.json();
-      errorMessage = error.error || errorMessage;
-    } catch (e) {
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } catch (e) {
+        errorMessage = 'Error desconocido al actualizar currency';
+      }
+    } else {
+      // Si no es JSON, probablemente es HTML (error 404/500)
       const text = await response.text();
-      errorMessage = text || errorMessage;
+      if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+        errorMessage = `Error del servidor (${response.status}). El endpoint puede no estar disponible.`;
+      } else {
+        errorMessage = text.substring(0, 200) || errorMessage;
+      }
     }
     throw new Error(errorMessage);
   }

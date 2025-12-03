@@ -61,7 +61,8 @@ export default function Settings() {
   const handleUpdateExisting = async () => {
     setIsUpdating(true);
     try {
-      const result = await updateTransactionsCurrency(selectedCurrency);
+      // Actualizar TODAS las transacciones a la moneda seleccionada
+      const result = await updateTransactionsCurrency(selectedCurrency, true);
       toast({
         title: "Transacciones actualizadas",
         description: result.message,
@@ -70,9 +71,10 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
     } catch (error: any) {
+      console.error('Error actualizando currency:', error);
       toast({
         title: "Error",
-        description: error.message || "No se pudieron actualizar las transacciones",
+        description: error.message || "No se pudieron actualizar las transacciones. Verifica que el servidor esté corriendo.",
         variant: "destructive",
       });
     } finally {

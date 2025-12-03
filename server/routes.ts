@@ -241,13 +241,16 @@ export async function registerRoutes(
   // Endpoint para actualizar currency de transacciones existentes
   app.patch("/api/transactions/update-currency", async (req, res) => {
     try {
-      const { currency = 'MXN' } = req.body;
+      const { currency = 'MXN', updateAll = false } = req.body;
       const allTransactions = await storage.getAllTransactions();
       
-      // Filtrar transacciones que necesitan actualización (sin currency, null, o EUR)
-      const transactionsToUpdate = allTransactions.filter(t => 
-        !t.currency || t.currency === 'EUR' || t.currency === null || t.currency === undefined
-      );
+      // Si updateAll es true, actualizar TODAS las transacciones
+      // Si es false, solo actualizar las que tienen EUR o no tienen currency
+      const transactionsToUpdate = updateAll 
+        ? allTransactions  // Actualizar todas
+        : allTransactions.filter(t => 
+            !t.currency || t.currency === 'EUR' || t.currency === null || t.currency === undefined || t.currency !== currency
+          );
       
       if (transactionsToUpdate.length === 0) {
         return res.json({ 
@@ -256,24 +259,29 @@ export async function registerRoutes(
         });
       }
 
+      console.log(`Actualizando ${transactionsToUpdate.length} transacciones a ${currency}`);
+
       // Actualizar cada transacción
       let updated = 0;
+      let errors = 0;
       for (const transaction of transactionsToUpdate) {
         try {
           await storage.updateTransaction(transaction.id, { currency });
           updated++;
         } catch (error) {
           console.error(`Error actualizando transacción ${transaction.id}:`, error);
+          errors++;
         }
       }
 
       res.json({ 
-        message: `${updated} transacciones actualizadas a ${currency}`,
-        updated 
+        message: `${updated} transacciones actualizadas a ${currency}${errors > 0 ? ` (${errors} errores)` : ''}`,
+        updated,
+        errors
       });
     } catch (error: any) {
       console.error("Error actualizando currency:", error);
-      res.status(500).json({ error: "Error actualizando currency" });
+      res.status(500).json({ error: error.message || "Error actualizando currency" });
     }
   });
 
