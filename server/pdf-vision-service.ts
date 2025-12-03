@@ -267,9 +267,9 @@ export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransact
     }
 
     // Extraer transacciones de cada página usando IA
-    // Procesar en batches para ser más eficiente
+    // Procesar en batches más grandes para ser más eficiente
     const allTransactions: ExtractedTransaction[] = [];
-    const batchSize = 3; // Procesar 3 páginas a la vez
+    const batchSize = 5; // Procesar 5 páginas a la vez (optimizado)
 
     for (let i = 0; i < pages.length; i += batchSize) {
       const batch = pages.slice(i, i + batchSize);
@@ -291,9 +291,9 @@ export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransact
         allTransactions.push(...pageTransactions);
       });
       
-      // Pequeña pausa entre batches para evitar rate limiting
+      // Pausa mínima entre batches para evitar rate limiting (reducida)
       if (i + batchSize < pages.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
 

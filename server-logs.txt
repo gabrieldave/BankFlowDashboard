@@ -74,3 +74,29 @@ Extraídas 12 transacciones de la página 4 usando DeepSeek API (texto)
   Transacción 11: fecha=2025-09-06, desc=Cargo - Transferencia enviada, amount=-318, type=expense
   Transacción 12: fecha=2025-09-06, desc=Cargo - Cashback recibido, amount=-220.4, type=expense
 Procesando página 5/21 con DeepSeek API...
+Extraídas 12 transacciones de la página 5 usando DeepSeek API (texto)
+  Transacción 1: fecha=2025-09-07, desc=Cargo - Pago USD: 6.99 TC : 18.77, amount=-131.22, type=expense
+  Transacción 2: fecha=2025-09-07, desc=Cargo - Pago USD: 5.63 TC : 18.77, amount=-0.56, type=expense
+  Transacción 3: fecha=2025-09-07, desc=Cargo - Transferencia enviada, amount=-200, type=expense
+  Transacción 4: fecha=2025-09-07, desc=Cargo - Pago USD: 10.88 TC : 18.77, amount=-0.93, type=expense
+  Transacción 5: fecha=2025-09-08, desc=Cargo - Cashback recibido, amount=-4480.99, type=expense
+  Transacción 6: fecha=2025-09-08, desc=Abono - Transferencia recibida Concepto de pago: L, amount=23888.5, type=income
+  Transacción 7: fecha=2025-09-08, desc=Cargo - Transferencia enviada, amount=-500, type=expense
+  Transacción 8: fecha=2025-09-08, desc=Cargo - Pago, amount=-379.99, type=expense
+  Transacción 9: fecha=2025-09-08, desc=Cargo - Pago USD: 6.99 TC : 18.77, amount=-0.56, type=expense
+  Transacción 10: fecha=2025-09-09, desc=Abono - Transferencia recibida Concepto de pago: M, amount=48077, type=income
+  Transacción 11: fecha=2025-09-09, desc=Cargo - Pago, amount=-20, type=expense
+  Transacción 12: fecha=2025-09-09, desc=Abono - Pago cancelado, amount=20, type=income
+Procesando página 6/21 con DeepSeek API...
+Extraídas 10 transacciones de la página 6 usando DeepSeek API (texto)
+  Transacción 1: fecha=2025-09-09, desc=Cargo - Pago, amount=-979, type=expense
+  Transacción 2: fecha=2025-09-09, desc=Cargo - Pago, amount=-138, type=expense
+  Transacción 3: fecha=2025-09-09, desc=Cargo - Pago, amount=-1500.08, type=expense
+  Transacción 4: fecha=2025-09-10, desc=Abono - Transferencia recibida Clave de rastreo: M, amount=6111.28, type=income
+  Transacción 5: fecha=2025-09-10, desc=Cargo - Compra, amount=-12126.26, type=expense
+  Transacción 6: fecha=2025-09-10, desc=Cargo - Transferencia enviada, amount=-300, type=expense
+  Transacción 7: fecha=2025-09-10, desc=Abono - Transferencia recibida Clave de rastreo: 5, amount=13809, type=income
+  Transacción 8: fecha=2025-09-10, desc=Cargo - Pago, amount=-2458, type=expense
+  Transacción 9: fecha=2025-09-10, desc=Cargo - Compra en Mercado Libre, amount=-295.3, type=expense
+  Transacción 10: fecha=2025-09-11, desc=Abono - Transferencia recibida Clave de rastreo: 5, amount=8456, type=income
+Procesando página 7/21 con DeepSeek API...

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Upload, FileText, CheckCircle2, AlertCircle, FileType } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, FileType, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,17 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("Analizando transacciones...");
+  
+  // Mensajes dinámicos que rotan durante el procesamiento
+  const statusMessages = [
+    "Extrayendo texto del PDF...",
+    "Analizando transacciones con IA...",
+    "Clasificando categorías...",
+    "Procesando páginas...",
+    "Identificando montos y fechas...",
+    "Casi terminamos...",
+  ];
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -43,16 +54,31 @@ export default function UploadPage() {
   const processFile = async (file: File) => {
     setIsUploading(true);
     setUploadProgress(0);
+    setStatusMessage("Iniciando procesamiento...");
 
+    // Simular progreso más realista con mensajes dinámicos
+    let messageIndex = 0;
+    const messageInterval = setInterval(() => {
+      setStatusMessage(statusMessages[messageIndex % statusMessages.length]);
+      messageIndex++;
+    }, 2000);
+
+    // Progreso más suave y realista
+    let progress = 0;
     const progressInterval = setInterval(() => {
-      setUploadProgress(prev => Math.min(prev + 10, 90));
-    }, 200);
+      // Incremento más lento al principio, más rápido al final
+      const increment = progress < 30 ? 1 : progress < 70 ? 2 : progress < 90 ? 1.5 : 0.5;
+      progress = Math.min(progress + increment, 95);
+      setUploadProgress(progress);
+    }, 300);
 
     try {
       const result = await uploadFile(file);
       
       clearInterval(progressInterval);
+      clearInterval(messageInterval);
       setUploadProgress(100);
+      setStatusMessage("¡Procesamiento completado!");
 
       setTimeout(() => {
         toast({
@@ -60,11 +86,13 @@ export default function UploadPage() {
           description: result.message,
         });
         setLocation("/dashboard");
-      }, 500);
+      }, 1000);
     } catch (error: any) {
       clearInterval(progressInterval);
+      clearInterval(messageInterval);
       setIsUploading(false);
       setUploadProgress(0);
+      setStatusMessage("Error al procesar");
       
       toast({
         title: "Error",
@@ -144,21 +172,63 @@ export default function UploadPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="w-full max-w-md space-y-6"
             >
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto animate-pulse">
-                <FileText className="w-10 h-10 text-green-600" />
-              </div>
+              {/* Spinner animado */}
+              <motion.div 
+                className="w-20 h-20 bg-gradient-to-br from-blue-100 to-green-100 rounded-full flex items-center justify-center mx-auto"
+                animate={{ 
+                  rotate: 360,
+                  scale: [1, 1.1, 1]
+                }}
+                transition={{ 
+                  rotate: { duration: 2, repeat: Infinity, ease: "linear" },
+                  scale: { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+                }}
+              >
+                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+              </motion.div>
               
               <div className="space-y-2">
                 <h3 className="text-2xl font-semibold text-gray-900">Procesando archivo...</h3>
-                <p className="text-muted-foreground" data-testid="text-progress">Analizando transacciones...</p>
+                <motion.p 
+                  key={statusMessage}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="text-muted-foreground min-h-[24px] flex items-center justify-center"
+                  data-testid="text-progress"
+                >
+                  {statusMessage}
+                </motion.p>
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm font-medium text-gray-600">
                   <span>Progreso</span>
-                  <span data-testid="text-percentage">{uploadProgress}%</span>
+                  <span data-testid="text-percentage">{Math.round(uploadProgress)}%</span>
                 </div>
-                <Progress value={uploadProgress} className="h-2" />
+                <Progress value={uploadProgress} className="h-3" />
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Por favor espera, esto puede tomar unos minutos...
+                </p>
+              </div>
+
+              {/* Indicador de actividad adicional */}
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <motion.div
+                  className="w-2 h-2 bg-primary rounded-full"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: 0 }}
+                />
+                <motion.div
+                  className="w-2 h-2 bg-primary rounded-full"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
+                />
+                <motion.div
+                  className="w-2 h-2 bg-primary rounded-full"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: 0.6 }}
+                />
               </div>
             </motion.div>
           )}
