@@ -1,1 +1,76 @@
-12:00:45 AM [express] serving on port 5000
+12:03:51 AM [express] serving on port 5000
+[PDF Parser] Usando IA para parsing. API_KEY presente: SÍ (sk-c0f2f1e...)
+Procesando PDF con DeepSeek Vision API (IA)...
+[PDF Vision Service] API Key detectada: sk-c0f2f1e...
+Iniciando procesamiento de PDF con DeepSeek API (extracción de texto)...
+Tamaño del buffer: 150746 bytes
+Extrayendo texto de 21 páginas del PDF...
+Página 1/21 - 1705 caracteres extraídos
+Página 2/21 - 1781 caracteres extraídos
+Página 3/21 - 1839 caracteres extraídos
+Página 4/21 - 1700 caracteres extraídos
+Página 5/21 - 1831 caracteres extraídos
+Página 6/21 - 1765 caracteres extraídos
+Página 7/21 - 1762 caracteres extraídos
+Página 8/21 - 1834 caracteres extraídos
+Página 9/21 - 1978 caracteres extraídos
+Página 10/21 - 2140 caracteres extraídos
+Página 11/21 - 1866 caracteres extraídos
+Página 12/21 - 1628 caracteres extraídos
+Página 13/21 - 1870 caracteres extraídos
+Página 14/21 - 1866 caracteres extraídos
+Página 15/21 - 1600 caracteres extraídos
+Página 16/21 - 2025 caracteres extraídos
+Página 17/21 - 2076 caracteres extraídos
+Página 18/21 - 1785 caracteres extraídos
+Página 19/21 - 2008 caracteres extraídos
+Página 20/21 - 602 caracteres extraídos
+Página 21/21 - 1500 caracteres extraídos
+Texto extraído de 21 páginas
+Procesando página 1/21 con DeepSeek API...
+Extraídas 8 transacciones de la página 1 usando DeepSeek API (texto)
+  Transacción 1: fecha=2025-09-01, desc=Cargo - Transferencia enviada Transferencia Interb, amount=-200, type=expense
+  Transacción 2: fecha=2025-09-01, desc=Cargo - Pago EUR: 77.00 TC : 22.02, amount=-1695.72, type=expense
+  Transacción 3: fecha=2025-09-02, desc=Cargo - Pago de suscripción, amount=-139.3, type=expense
+  Transacción 4: fecha=2025-09-02, desc=Cargo - Transferencia enviada, amount=-234, type=expense
+  Transacción 5: fecha=2025-09-02, desc=Abono - Transferencia recibida MERCADO PAGO CLABE:, amount=1000, type=income
+  Transacción 6: fecha=2025-09-02, desc=Cargo - Pago, amount=-239, type=expense
+  Transacción 7: fecha=2025-09-03, desc=Cargo - Pago MXN: 15.00 TC : 1.00, amount=-15, type=expense
+  Transacción 8: fecha=2025-09-03, desc=Cargo - Compra, amount=-1443.2, type=expense
+Procesando página 2/21 con DeepSeek API...
+Extraídas 9 transacciones de la página 2 usando DeepSeek API (texto)
+  Transacción 1: fecha=2025-09-04, desc=Abono - Transferencia recibida Clave de rastreo: M, amount=4300.55, type=income
+  Transacción 2: fecha=2025-09-04, desc=Abono - Transferencia recibida Clave de rastreo: 5, amount=24934, type=income
+  Transacción 3: fecha=2025-09-04, desc=Cargo - Pago, amount=-10, type=expense
+  Transacción 4: fecha=2025-09-04, desc=Cargo - Transferencia enviada, amount=-13000, type=expense
+  Transacción 5: fecha=2025-09-04, desc=Cargo - Pago, amount=-428.86, type=expense
+  Transacción 6: fecha=2025-09-04, desc=Cargo - Transferencia enviada Transferencia Interb, amount=-500, type=expense
+  Transacción 7: fecha=2025-09-04, desc=Cargo - Compra, amount=-549, type=expense
+  Transacción 8: fecha=2025-09-04, desc=Cargo - Pago, amount=-797, type=expense
+  Transacción 9: fecha=2025-09-04, desc=Cargo - Pago, amount=-829, type=expense
+Procesando página 3/21 con DeepSeek API...
+Extraídas 9 transacciones de la página 3 usando DeepSeek API (texto)
+  Transacción 1: fecha=2025-09-04, desc=Cargo - Pago, amount=-449.99, type=expense
+  Transacción 2: fecha=2025-09-04, desc=Cargo - Pago, amount=-344.83, type=expense
+  Transacción 3: fecha=2025-09-04, desc=Cargo - Pago, amount=-280, type=expense
+  Transacción 4: fecha=2025-09-05, desc=Abono - Transferencia recibida MERCADO PAGO CLABE:, amount=3500, type=income
+  Transacción 5: fecha=2025-09-05, desc=Abono - Transferencia recibida Viernes 5 septienrb, amount=22914, type=income
+  Transacción 6: fecha=2025-09-05, desc=Cargo - Pago, amount=-239, type=expense
+  Transacción 7: fecha=2025-09-05, desc=Abono - Transferencia recibida STRIPE CLABE: 14180, amount=6618.34, type=income
+  Transacción 8: fecha=2025-09-05, desc=Abono - Transferencia recibida Transferencia SPEI , amount=3836.03, type=income
+  Transacción 9: fecha=2025-09-05, desc=Cargo - Pago, amount=-1499, type=expense
+Procesando página 4/21 con DeepSeek API...
+Extraídas 12 transacciones de la página 4 usando DeepSeek API (texto)
+  Transacción 1: fecha=2025-09-05, desc=Cargo - Cashback recibido, amount=-1672.5, type=expense
+  Transacción 2: fecha=2025-09-05, desc=Cargo - Pago, amount=-130, type=expense
+  Transacción 3: fecha=2025-09-05, desc=Cargo - Pago, amount=-260, type=expense
+  Transacción 4: fecha=2025-09-05, desc=Cargo - Pago USD: 5.63 TC : 18.77, amount=-105.69, type=expense
+  Transacción 5: fecha=2025-09-05, desc=Cargo - Pago, amount=-99, type=expense
+  Transacción 6: fecha=2025-09-06, desc=Cargo - Pago USD: 10.88 TC : 18.77, amount=-204.25, type=expense
+  Transacción 7: fecha=2025-09-06, desc=Cargo - Pago, amount=-270, type=expense
+  Transacción 8: fecha=2025-09-06, desc=Cargo - Pago, amount=-675.2, type=expense
+  Transacción 9: fecha=2025-09-06, desc=Cargo - Pago, amount=-449, type=expense
+  Transacción 10: fecha=2025-09-06, desc=Cargo - Transferencia enviada Transferencia Interb, amount=-200, type=expense
+  Transacción 11: fecha=2025-09-06, desc=Cargo - Transferencia enviada, amount=-318, type=expense
+  Transacción 12: fecha=2025-09-06, desc=Cargo - Cashback recibido, amount=-220.4, type=expense
+Procesando página 5/21 con DeepSeek API...

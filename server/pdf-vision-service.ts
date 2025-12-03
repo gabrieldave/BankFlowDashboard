@@ -267,23 +267,33 @@ export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransact
     }
 
     // Extraer transacciones de cada página usando IA
+    // Procesar en batches para ser más eficiente
     const allTransactions: ExtractedTransaction[] = [];
+    const batchSize = 3; // Procesar 3 páginas a la vez
 
-    for (let i = 0; i < pages.length; i++) {
-      const page = pages[i];
-      console.log(`Procesando página ${page.pageNumber}/${pages.length} con DeepSeek API...`);
+    for (let i = 0; i < pages.length; i += batchSize) {
+      const batch = pages.slice(i, i + batchSize);
+      console.log(`Procesando páginas ${i + 1}-${Math.min(i + batchSize, pages.length)}/${pages.length} con DeepSeek API...`);
       
-      const pageTransactions = await extractTransactionsFromText(
-        page.text,
-        page.pageNumber,
-        pages.length
+      // Procesar batch en paralelo
+      const batchPromises = batch.map(page => 
+        extractTransactionsFromText(
+          page.text,
+          page.pageNumber,
+          pages.length
+        )
       );
       
-      allTransactions.push(...pageTransactions);
+      const batchResults = await Promise.all(batchPromises);
       
-      // Pequeña pausa para evitar rate limiting
-      if (i < pages.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+      // Agregar todas las transacciones del batch
+      batchResults.forEach(pageTransactions => {
+        allTransactions.push(...pageTransactions);
+      });
+      
+      // Pequeña pausa entre batches para evitar rate limiting
+      if (i + batchSize < pages.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
