@@ -517,16 +517,16 @@ function normalizeDate(dateStr: string): string {
     const [, day, monthText, year] = textMonthMatch;
     const monthNames: Record<string, string> = {
       'ene': '01', 'jan': '01', 'enero': '01', 'january': '01',
-      'feb': '02', 'feb': '02', 'febrero': '02', 'february': '02',
-      'mar': '03', 'mar': '03', 'marzo': '03', 'march': '03',
+      'feb': '02', 'febrero': '02', 'february': '02',
+      'mar': '03', 'marzo': '03', 'march': '03',
       'abr': '04', 'apr': '04', 'abril': '04', 'april': '04',
-      'may': '05', 'may': '05', 'mayo': '05', 'may': '05',
-      'jun': '06', 'jun': '06', 'junio': '06', 'june': '06',
-      'jul': '07', 'jul': '07', 'julio': '07', 'july': '07',
+      'may': '05', 'mayo': '05',
+      'jun': '06', 'junio': '06', 'june': '06',
+      'jul': '07', 'julio': '07', 'july': '07',
       'ago': '08', 'aug': '08', 'agosto': '08', 'august': '08',
-      'sep': '09', 'sep': '09', 'septiembre': '09', 'september': '09',
-      'oct': '10', 'oct': '10', 'octubre': '10', 'october': '10',
-      'nov': '11', 'nov': '11', 'noviembre': '11', 'november': '11',
+      'sep': '09', 'septiembre': '09', 'september': '09',
+      'oct': '10', 'octubre': '10', 'october': '10',
+      'nov': '11', 'noviembre': '11', 'november': '11',
       'dic': '12', 'dec': '12', 'diciembre': '12', 'december': '12',
     };
     
