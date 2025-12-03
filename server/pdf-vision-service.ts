@@ -73,9 +73,13 @@ async function pdfToImages(buffer: Buffer): Promise<string[]> {
       const canvas = createCanvas(viewport.width, viewport.height);
       const context = canvas.getContext('2d');
       
+      // Asegurar que el canvas tenga las propiedades necesarias para pdfjs-dist
+      // pdfjs-dist necesita acceso al canvas, no solo al contexto
       const renderContext = {
-        canvasContext: context as any,
+        canvasContext: context,
         viewport: viewport,
+        // Pasar el canvas también para que pdfjs-dist pueda acceder a él
+        canvas: canvas,
       };
       
       await page.render(renderContext).promise;
