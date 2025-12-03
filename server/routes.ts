@@ -30,8 +30,15 @@ export async function registerRoutes(
       if (fileType === "text/csv" || req.file.originalname.endsWith('.csv')) {
         const content = req.file.buffer.toString('utf-8');
         transactions = await parseCSV(content);
-      } else if (fileType === "application/pdf") {
-        transactions = await parsePDF(req.file.buffer);
+      } else if (fileType === "application/pdf" || req.file.originalname.toLowerCase().endsWith('.pdf')) {
+        try {
+          transactions = await parsePDF(req.file.buffer);
+        } catch (pdfError: any) {
+          console.error("Error específico en PDF:", pdfError);
+          return res.status(400).json({ 
+            error: pdfError.message || "Error al procesar el PDF. Verifica que sea un estado de cuenta válido." 
+          });
+        }
       } else {
         return res.status(400).json({ 
           error: "Formato no soportado. Usa CSV o PDF." 
@@ -69,8 +76,10 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       console.error("Error procesando archivo:", error);
+      console.error("Stack trace:", error.stack);
       res.status(500).json({ 
-        error: error.message || "Error procesando el archivo" 
+        error: error.message || "Error procesando el archivo",
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   });

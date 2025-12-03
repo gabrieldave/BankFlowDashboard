@@ -1,13 +1,27 @@
 import type { InsertTransaction } from "@shared/schema";
 import { classifyTransaction, classifyTransactionsBatch } from "./ai-service";
 
+// Importar polyfills para APIs del DOM necesarias para pdf-parse
+import "./pdf-polyfill";
+
 let pdfParse: any;
 
 async function getPdfParser() {
   if (!pdfParse) {
-    const pdfParseModule = await import("pdf-parse");
-    // pdf-parse puede exportar de diferentes formas
-    pdfParse = (pdfParseModule as any).default || pdfParseModule;
+    try {
+      // Intentar usar pdf-parse con configuración para Node.js
+      const pdfParseModule = await import("pdf-parse");
+      pdfParse = (pdfParseModule as any).default || pdfParseModule;
+      
+      // Verificar que la función esté disponible
+      if (typeof pdfParse !== 'function') {
+        throw new Error('pdf-parse no se cargó correctamente');
+      }
+    } catch (importError: any) {
+      console.error('Error importando pdf-parse:', importError);
+      // Si falla, intentar con una alternativa
+      throw new Error(`Error cargando pdf-parse: ${importError.message}. Ejecuta: npm install pdf-parse`);
+    }
   }
   return pdfParse;
 }
@@ -66,9 +80,36 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
 export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
   try {
     console.log('Iniciando procesamiento de PDF...');
+    console.log('Tamaño del buffer:', buffer.length, 'bytes');
+    
     const parser = await getPdfParser();
-    const data = await parser(buffer);
-    const text = data.text;
+    
+    // Opciones para pdf-parse que evitan problemas con DOMMatrix
+    const options = {
+      // Evitar usar APIs del navegador
+      max: 0, // Procesar todas las páginas
+    };
+    
+    console.log('Parseando PDF...');
+    
+    // Intentar parsear el PDF
+    let data: any;
+    try {
+      // Primero intentar sin opciones
+      data = await parser(buffer);
+    } catch (parseError: any) {
+      // Si falla, intentar con opciones
+      console.warn('Primer intento falló, intentando con opciones:', parseError.message);
+      try {
+        data = await parser(buffer, options);
+      } catch (secondError: any) {
+        // Si aún falla, intentar sin opciones pero con manejo de errores
+        console.error('Error parseando PDF:', secondError);
+        throw new Error(`Error al parsear PDF: ${secondError.message}. El PDF puede estar corrupto o en un formato no soportado.`);
+      }
+    }
+    
+    const text = data?.text || data;
     
     console.log(`PDF extraído: ${text.length} caracteres`);
     
@@ -114,38 +155,59 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
     if (rawTransactions.length === 0) {
       // Intentar estrategia alternativa: buscar patrones más flexibles
       console.log('Intentando estrategia alternativa de extracción...');
-      const altTransactions = extractTransactionsAlternative(text);
-      if (altTransactions.length > 0) {
-        console.log(`Encontradas ${altTransactions.length} transacciones con método alternativo`);
-        rawTransactions.push(...altTransactions);
+      try {
+        const altTransactions = extractTransactionsAlternative(text);
+        if (altTransactions.length > 0) {
+          console.log(`Encontradas ${altTransactions.length} transacciones con método alternativo`);
+          rawTransactions.push(...altTransactions);
+        }
+      } catch (altError) {
+        console.warn('Error en método alternativo:', altError);
       }
     }
 
     if (rawTransactions.length === 0) {
-      throw new Error('No se encontraron transacciones en el PDF. Verifica que el archivo sea un estado de cuenta válido.');
+      throw new Error('No se encontraron transacciones en el PDF. El archivo puede no ser un estado de cuenta, o el formato no es reconocido. Intenta exportar como CSV desde tu banco.');
     }
 
     // Clasificar todas las transacciones usando IA
     console.log('Clasificando transacciones con IA...');
-    const classifications = await classifyTransactionsBatch(rawTransactions);
+    let classifications;
+    try {
+      classifications = await classifyTransactionsBatch(rawTransactions);
+    } catch (aiError) {
+      console.warn('Error en clasificación IA, usando clasificación básica:', aiError);
+      // Si falla la IA, usar clasificación básica
+      classifications = rawTransactions.map(t => ({
+        category: 'General',
+        merchant: t.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
+        confidence: 0.5,
+      }));
+    }
     
     // Combinar datos con clasificaciones
     const transactions: InsertTransaction[] = rawTransactions.map((raw, idx) => {
-      const classification = classifications[idx] || {
+      const classification = (classifications && classifications[idx]) ? classifications[idx] : {
         category: 'General',
         merchant: raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
         confidence: 0.5,
       };
 
+      // Validar que los datos sean correctos
+      if (!raw.date || !raw.description || isNaN(parseFloat(raw.amount.toString()))) {
+        console.warn('Transacción inválida encontrada:', raw);
+        return null;
+      }
+
       return {
         date: raw.date,
-        description: raw.description,
+        description: raw.description.substring(0, 500), // Limitar longitud
         amount: Math.abs(raw.amount).toString(),
         type: raw.amount >= 0 ? 'income' : 'expense',
-        category: classification.category,
-        merchant: classification.merchant,
+        category: classification.category || 'General',
+        merchant: (classification.merchant || raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido').substring(0, 200),
       };
-    });
+    }).filter((t): t is InsertTransaction => t !== null);
     
     console.log(`Procesamiento completado: ${transactions.length} transacciones`);
     return transactions;
