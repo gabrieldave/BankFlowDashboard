@@ -25,6 +25,11 @@ export interface Stats {
   largestIncomes?: Array<{ id: number; description: string; merchant: string; category: string; amount: number; date: string }>;
   totalTransactions?: number;
   avgTransactionAmount?: number;
+  avgDailyExpense?: number;
+  avgDailyIncome?: number;
+  mostSpentDay?: { day: string; amount: number } | null;
+  topCategory?: { name: string; amount: number; count: number } | null;
+  mostFrequentMerchant?: { name: string; count: number } | null;
 }
 
 export async function uploadFile(file: File): Promise<{ message: string; count: number; transactions: Transaction[] }> {

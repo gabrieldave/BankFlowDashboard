@@ -9,7 +9,12 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Building2,
-  Target
+  Target,
+  Info,
+  Zap,
+  Clock,
+  Award,
+  TrendingDown as TrendingDownIcon
 } from "lucide-react";
 import { 
   LineChart, 
@@ -25,6 +30,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Table, 
   TableBody, 
@@ -88,70 +94,88 @@ export default function Analytics() {
         <p className="text-muted-foreground">Insights detallados sobre tus finanzas y patrones de gasto</p>
       </div>
 
-      {/* Métricas clave */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-none shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-muted-foreground">Tendencia de Gastos</p>
-              {stats.expenseTrend && stats.expenseTrend > 0 ? (
-                <TrendingUp className="h-4 w-4 text-red-500" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-green-500" />
-              )}
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900">
-              {stats.expenseTrend ? (
-                <>
-                  {stats.expenseTrend > 0 ? '+' : ''}
-                  {stats.expenseTrend.toFixed(1)}%
-                </>
-              ) : (
-                'N/A'
-              )}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">vs últimos 3 meses</p>
-          </CardContent>
-        </Card>
+      {/* Métricas clave - Primera fila */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Tendencia de Gastos"
+          value={stats.expenseTrend ? `${stats.expenseTrend > 0 ? '+' : ''}${stats.expenseTrend.toFixed(1)}%` : 'N/A'}
+          subtitle="vs últimos 3 meses"
+          icon={stats.expenseTrend && stats.expenseTrend > 0 ? TrendingUp : TrendingDown}
+          iconColor={stats.expenseTrend && stats.expenseTrend > 0 ? "text-red-500" : "text-green-500"}
+          explanation={stats.expenseTrend ? 
+            `Tus gastos ${stats.expenseTrend > 0 ? 'aumentaron' : 'disminuyeron'} un ${Math.abs(stats.expenseTrend).toFixed(1)}% en promedio comparado con los 3 meses anteriores. ${stats.expenseTrend > 0 ? 'Considera revisar tus hábitos de gasto.' : '¡Excelente control de gastos!'}` 
+            : 'No hay suficientes datos históricos para calcular la tendencia.'}
+        />
 
-        <Card className="border-none shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-muted-foreground">Total Transacciones</p>
-              <Calendar className="h-4 w-4 text-primary" />
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900">
-              {stats.totalTransactions || 0}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">registradas</p>
-          </CardContent>
-        </Card>
+        <MetricCard
+          title="Total Transacciones"
+          value={stats.totalTransactions || 0}
+          subtitle="registradas"
+          icon={Calendar}
+          iconColor="text-primary"
+          explanation={`Tienes ${stats.totalTransactions || 0} transacciones registradas en total. ${stats.totalTransactions && stats.totalTransactions > 100 ? 'Tienes un buen historial de datos para análisis.' : 'Sigue agregando transacciones para análisis más precisos.'}`}
+        />
 
-        <Card className="border-none shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-muted-foreground">Gasto Promedio</p>
-              <DollarSign className="h-4 w-4 text-primary" />
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900">
-              {formatCurrency(stats.avgTransactionAmount || 0, defaultCurrency)}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">por transacción</p>
-          </CardContent>
-        </Card>
+        <MetricCard
+          title="Gasto Promedio"
+          value={formatCurrency(stats.avgTransactionAmount || 0, defaultCurrency)}
+          subtitle="por transacción"
+          icon={DollarSign}
+          iconColor="text-primary"
+          explanation={`El promedio de cada transacción de gasto es ${formatCurrency(stats.avgTransactionAmount || 0, defaultCurrency)}. Esto te ayuda a entender el tamaño típico de tus gastos.`}
+        />
 
-        <Card className="border-none shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-muted-foreground">Tasa de Ahorro</p>
-              <Target className="h-4 w-4 text-primary" />
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900">
-              {stats.savingsRate.toFixed(1)}%
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">del total de ingresos</p>
-          </CardContent>
-        </Card>
+        <MetricCard
+          title="Tasa de Ahorro"
+          value={`${stats.savingsRate.toFixed(1)}%`}
+          subtitle="del total de ingresos"
+          icon={Target}
+          iconColor="text-primary"
+          explanation={`Estás ahorrando el ${stats.savingsRate.toFixed(1)}% de tus ingresos. ${stats.savingsRate >= 20 ? '¡Excelente tasa de ahorro!' : stats.savingsRate >= 10 ? 'Buena tasa de ahorro, puedes mejorarla.' : 'Considera aumentar tu tasa de ahorro para mayor seguridad financiera.'}`}
+        />
+      </div>
+
+      {/* Métricas adicionales - Segunda fila */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Gasto Diario Promedio"
+          value={formatCurrency(stats.avgDailyExpense || 0, defaultCurrency)}
+          subtitle="últimos 30 días"
+          icon={Clock}
+          iconColor="text-red-500"
+          explanation={`En promedio, gastas ${formatCurrency(stats.avgDailyExpense || 0, defaultCurrency)} por día. Multiplicado por 30 días, esto representa aproximadamente ${formatCurrency((stats.avgDailyExpense || 0) * 30, defaultCurrency)} mensuales.`}
+        />
+
+        <MetricCard
+          title="Ingreso Diario Promedio"
+          value={formatCurrency(stats.avgDailyIncome || 0, defaultCurrency)}
+          subtitle="últimos 30 días"
+          icon={Zap}
+          iconColor="text-green-500"
+          explanation={`En promedio, recibes ${formatCurrency(stats.avgDailyIncome || 0, defaultCurrency)} por día. Esto te ayuda a proyectar tus ingresos mensuales.`}
+        />
+
+        {stats.mostSpentDay && (
+          <MetricCard
+            title="Día Más Gastado"
+            value={stats.mostSpentDay.day}
+            subtitle={formatCurrency(stats.mostSpentDay.amount, defaultCurrency)}
+            icon={ShoppingCart}
+            iconColor="text-orange-500"
+            explanation={`El ${stats.mostSpentDay.day} es el día de la semana en que más gastas, con un total de ${formatCurrency(stats.mostSpentDay.amount, defaultCurrency)}. Considera revisar tus hábitos de gasto en este día.`}
+          />
+        )}
+
+        {stats.topCategory && (
+          <MetricCard
+            title="Categoría Más Gastada"
+            value={stats.topCategory.name}
+            subtitle={`${formatCurrency(stats.topCategory.amount, defaultCurrency)} (${stats.topCategory.count} transacciones)`}
+            icon={Award}
+            iconColor="text-purple-500"
+            explanation={`La categoría "${stats.topCategory.name}" representa tu mayor gasto con ${formatCurrency(stats.topCategory.amount, defaultCurrency)} en ${stats.topCategory.count} transacciones. Representa el ${((stats.topCategory.amount / stats.monthlyExpenses) * 100).toFixed(1)}% de tus gastos totales.`}
+          />
+        )}
       </div>
 
       {/* Gráfico diario */}
@@ -322,5 +346,52 @@ export default function Analytics() {
         </Card>
       )}
     </div>
+  );
+}
+
+function MetricCard({ 
+  title, 
+  value, 
+  subtitle, 
+  icon: Icon, 
+  iconColor, 
+  explanation 
+}: { 
+  title: string; 
+  value: string | number; 
+  subtitle: string; 
+  icon: any; 
+  iconColor: string; 
+  explanation?: string;
+}) {
+  return (
+    <Card className="border-none shadow-sm hover:shadow-md transition-all duration-200">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <div className="flex items-center gap-2">
+            <Icon className={`h-4 w-4 ${iconColor}`} />
+            {explanation && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-muted-foreground hover:text-foreground transition-colors">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[280px]">
+                    <p className="text-xs">{explanation}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+        </div>
+        <h3 className="text-2xl font-bold text-gray-900">
+          {value}
+        </h3>
+        <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+      </CardContent>
+    </Card>
   );
 }

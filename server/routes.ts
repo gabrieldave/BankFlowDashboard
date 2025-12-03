@@ -178,6 +178,44 @@ export async function registerRoutes(
       // Análisis diario (últimos 30 días)
       const dailyData = calculateDailyData(transactions);
 
+      // Calcular métricas adicionales útiles
+      const expenseTransactions = transactions.filter(t => t.type === 'expense');
+      const incomeTransactions = transactions.filter(t => t.type === 'income');
+      
+      // Gasto promedio diario (últimos 30 días)
+      const last30Days = dailyData.length;
+      const avgDailyExpense = last30Days > 0 
+        ? dailyData.reduce((acc, d) => acc + d.expense, 0) / last30Days 
+        : 0;
+      
+      // Ingreso promedio diario (últimos 30 días)
+      const avgDailyIncome = last30Days > 0 
+        ? dailyData.reduce((acc, d) => acc + d.income, 0) / last30Days 
+        : 0;
+      
+      // Día de la semana con más gastos
+      const dayOfWeekTotals: Record<string, number> = {};
+      expenseTransactions.forEach(t => {
+        try {
+          const date = new Date(t.date);
+          const dayName = date.toLocaleDateString('es-ES', { weekday: 'long' });
+          dayOfWeekTotals[dayName] = (dayOfWeekTotals[dayName] || 0) + parseFloat(t.amount);
+        } catch (e) {}
+      });
+      const mostSpentDay = Object.entries(dayOfWeekTotals)
+        .sort((a, b) => b[1] - a[1])[0];
+      
+      // Categoría más gastada
+      const topCategory = categoryData.length > 0 ? categoryData[0] : null;
+      
+      // Transacciones más frecuentes (por merchant)
+      const merchantCounts: Record<string, number> = {};
+      transactions.forEach(t => {
+        merchantCounts[t.merchant] = (merchantCounts[t.merchant] || 0) + 1;
+      });
+      const mostFrequentMerchant = Object.entries(merchantCounts)
+        .sort((a, b) => b[1] - a[1])[0];
+
       // Transacciones más grandes
       const largestExpenses = transactions
         .filter(t => t.type === 'expense')
@@ -219,9 +257,25 @@ export async function registerRoutes(
         largestExpenses,
         largestIncomes,
         totalTransactions: transactions.length,
-        avgTransactionAmount: transactions.length > 0 
-          ? parseFloat((expenses / transactions.filter(t => t.type === 'expense').length).toFixed(2))
+        avgTransactionAmount: expenseTransactions.length > 0 
+          ? parseFloat((expenses / expenseTransactions.length).toFixed(2))
           : 0,
+        // Métricas adicionales
+        avgDailyExpense: parseFloat(avgDailyExpense.toFixed(2)),
+        avgDailyIncome: parseFloat(avgDailyIncome.toFixed(2)),
+        mostSpentDay: mostSpentDay ? {
+          day: mostSpentDay[0],
+          amount: parseFloat(mostSpentDay[1].toFixed(2))
+        } : null,
+        topCategory: topCategory ? {
+          name: topCategory.name,
+          amount: parseFloat(topCategory.value.toFixed(2)),
+          count: topCategory.count || 0
+        } : null,
+        mostFrequentMerchant: mostFrequentMerchant ? {
+          name: mostFrequentMerchant[0],
+          count: mostFrequentMerchant[1]
+        } : null,
       });
     } catch (error: any) {
       console.error("Error calculando estadísticas:", error);
