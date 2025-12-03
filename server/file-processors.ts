@@ -9,8 +9,12 @@ let pdfParse: any;
 async function getPdfParser() {
   if (!pdfParse) {
     try {
-      // Intentar usar pdf-parse con configuración para Node.js
-      const pdfParseModule = await import("pdf-parse");
+      // Usar createRequire para importar pdf-parse de forma más estable en ES modules
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      
+      // Intentar cargar pdf-parse usando require (más estable que import dinámico)
+      const pdfParseModule = require("pdf-parse");
       
       // pdf-parse puede exportarse de diferentes formas dependiendo de la versión
       // Intentar múltiples formas de acceso
@@ -18,17 +22,16 @@ async function getPdfParser() {
         pdfParse = pdfParseModule;
       } else if (pdfParseModule.default && typeof pdfParseModule.default === 'function') {
         pdfParse = pdfParseModule.default;
-      } else if ((pdfParseModule as any).pdfParse && typeof (pdfParseModule as any).pdfParse === 'function') {
-        pdfParse = (pdfParseModule as any).pdfParse;
-      } else if (typeof (pdfParseModule as any) === 'function') {
-        pdfParse = pdfParseModule as any;
+      } else if (pdfParseModule.pdfParse && typeof pdfParseModule.pdfParse === 'function') {
+        pdfParse = pdfParseModule.pdfParse;
       } else {
         // Último intento: buscar cualquier propiedad que sea una función
         const keys = Object.keys(pdfParseModule);
-        const funcKey = keys.find(key => typeof (pdfParseModule as any)[key] === 'function');
+        const funcKey = keys.find(key => typeof pdfParseModule[key] === 'function');
         if (funcKey) {
-          pdfParse = (pdfParseModule as any)[funcKey];
+          pdfParse = pdfParseModule[funcKey];
         } else {
+          console.error('Estructura del módulo pdf-parse:', Object.keys(pdfParseModule));
           throw new Error('pdf-parse no se cargó correctamente: no se encontró la función de parseo');
         }
       }
@@ -38,11 +41,24 @@ async function getPdfParser() {
         console.error('Estructura del módulo pdf-parse:', Object.keys(pdfParseModule));
         throw new Error('pdf-parse no se cargó correctamente: el módulo no exporta una función');
       }
+      
+      console.log('pdf-parse cargado correctamente');
     } catch (importError: any) {
       console.error('Error importando pdf-parse:', importError);
       console.error('Stack trace:', importError.stack);
-      // Si falla, intentar con una alternativa
-      throw new Error(`Error cargando pdf-parse: ${importError.message}. Ejecuta: npm install pdf-parse`);
+      // Si falla, intentar con import dinámico como fallback
+      try {
+        console.log('Intentando import dinámico como fallback...');
+        const pdfParseModule = await import("pdf-parse");
+        pdfParse = (pdfParseModule as any).default || pdfParseModule;
+        if (typeof pdfParse !== 'function') {
+          throw new Error('Import dinámico tampoco funcionó');
+        }
+        console.log('pdf-parse cargado con import dinámico');
+      } catch (fallbackError: any) {
+        console.error('Error en fallback:', fallbackError);
+        throw new Error(`Error cargando pdf-parse: ${importError.message}. Ejecuta: npm install pdf-parse`);
+      }
     }
   }
   return pdfParse;
