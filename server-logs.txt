@@ -1,0 +1,14 @@
+11:53:05 PM [express] serving on port 5000
+[PDF Parser] Usando IA para parsing. API_KEY presente: SÍ (sk-c0f2f1e...)
+Procesando PDF con DeepSeek Vision API (IA)...
+❌ [PDF Parser] Error procesando PDF con IA: Invalid regular expression: /[^\d.,-+]/g: Range out of order in character class
+📋 [PDF Parser] Stack trace: SyntaxError: Invalid regular expression: /[^\d.,-+]/g: Range out of order in character class
+    at compileSourceTextModule (node:internal/modules/esm/utils:357:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:109:18)
+    at #translate (node:internal/modules/esm/loader:564:20)
+    at afterLoad (node:internal/modules/esm/loader:614:29)
+    at async #link (node:internal/modules/esm/module_job:180:19)
+Error específico en PDF: Error: Error procesando PDF con IA: Invalid regular expression: /[^\d.,-+]/g: Range out of order in character class. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente.
+    at parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:80:11)
+    at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
+11:54:10 PM [express] POST /api/upload 400 in 23ms :: {"error":"Error procesando PDF con IA: Invalid regular expression: /[^\\d.,-+]/g: Range out of order in character class. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente."}

@@ -218,8 +218,8 @@ IMPORTANTE:
       if (typeof t.amount === 'number') {
         amount = t.amount;
       } else if (typeof t.amount === 'string') {
-        // Limpiar el string de monto
-        const cleanAmount = t.amount.replace(/[^\d.,-+]/g, '').replace(',', '.');
+        // Limpiar el string de monto (el guion debe estar al final o escapado en la clase de caracteres)
+        const cleanAmount = t.amount.replace(/[^\d.,+-]/g, '').replace(',', '.');
         amount = parseFloat(cleanAmount);
         if (isNaN(amount)) {
           console.warn(`Monto inválido en transacción: "${t.amount}" -> parseado como NaN`);
