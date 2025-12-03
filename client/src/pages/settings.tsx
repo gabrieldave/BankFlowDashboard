@@ -165,7 +165,7 @@ export default function Settings() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Si tus transacciones muestran una moneda incorrecta, haz clic en "Actualizar transacciones existentes" para cambiarlas a {CURRENCIES.find(c => c.code === selectedCurrency)?.name}.
+              Si tus transacciones muestran una moneda incorrecta (como EUR), haz clic en "Actualizar transacciones existentes" para cambiar TODAS las transacciones a {CURRENCIES.find(c => c.code === selectedCurrency)?.name}.
             </p>
           </CardContent>
         </Card>
