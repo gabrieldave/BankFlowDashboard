@@ -188,9 +188,14 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
       if (transaction) {
         // Determinar si es ingreso o gasto basado en el monto y contexto
         const amount = parseFloat(transaction.amount);
-        const isIncome = detectIncome(transaction.description, amount);
         
-        console.log(`Transacción procesada: ${isIncome ? 'INGRESO' : 'GASTO'} - ${transaction.description.substring(0, 50)} - ${amount}`);
+        // Verificar si la línea original tenía signo + (abono)
+        const originalLine = i > 0 ? lines[i - 1] + ' ' + line : line;
+        const hasPlusSign = originalLine.includes('+$') || originalLine.includes('+ $') || originalLine.includes('+');
+        
+        const isIncome = detectIncome(transaction.description, amount, hasPlusSign);
+        
+        console.log(`Transacción procesada: ${isIncome ? 'INGRESO' : 'GASTO'} - ${transaction.description.substring(0, 50)} - ${amount}${hasPlusSign ? ' (con signo +)' : ''}`);
         
         rawTransactions.push({
           date: transaction.date,
@@ -392,14 +397,20 @@ function extractTransactionsAlternative(text: string): Array<{ date: string; des
   return transactions;
 }
 
-function detectIncome(description: string, amount: number): boolean {
+function detectIncome(description: string, amount: number, hasPlusSign: boolean = false): boolean {
   const desc = description.toLowerCase();
+  
+  // Si tiene signo + explícito, es definitivamente un ingreso
+  if (hasPlusSign || description.includes('+$') || description.includes('+ $') || description.includes('+')) {
+    console.log(`Ingreso detectado por signo + en: ${description.substring(0, 50)}`);
+    return true;
+  }
   
   // Keywords más completas para detectar ingresos
   const incomeKeywords = [
     'deposito', 'depósito', 'depositos', 'depósitos',
-    'transferencia recibida', 'transferencia recib', 'transfer recibida',
-    'abono', 'abonos', 'abono -', 'abono transferencia',
+    'transferencia recibida', 'transferencia recib', 'transfer recibida', 'transfer recib',
+    'abono', 'abonos', 'abono -', 'abono transferencia', 'abono transfer',
     'nomina', 'nómina', 'nominas', 'nóminas',
     'salario', 'salarios', 'sueldo', 'sueldos',
     'pago recibido', 'pago recib', 'pagos recibidos',
@@ -418,17 +429,11 @@ function detectIncome(description: string, amount: number): boolean {
     }
   }
   
-  // Si el monto tiene signo + explícito, es ingreso
-  if (description.includes('+') || description.includes('+$') || description.includes('+ $')) {
-    console.log(`Ingreso detectado por signo + en: ${description.substring(0, 50)}`);
-    return true;
-  }
-  
   // Si el monto es muy grande y positivo, probablemente es un ingreso
   if (amount > 1000) {
     console.log(`Posible ingreso por monto grande (${amount}) en: ${description.substring(0, 50)}`);
     // Pero no asumir automáticamente, solo si no hay keywords de gasto
-    const expenseKeywords = ['cargo', 'cargos', 'retiro', 'retiros', 'pago', 'pagos', 'compra', 'compras', 'gasto', 'gastos'];
+    const expenseKeywords = ['cargo', 'cargos', 'retiro', 'retiros', 'pago', 'pagos', 'compra', 'compras', 'gasto', 'gastos', 'debito', 'débito'];
     const hasExpenseKeyword = expenseKeywords.some(kw => desc.includes(kw));
     if (!hasExpenseKeyword) {
       return true;
