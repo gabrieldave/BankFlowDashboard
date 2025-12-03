@@ -128,42 +128,56 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
     
     const parser = await getPdfParser();
     
-    // Opciones para pdf-parse que evitan problemas con DOMMatrix
+    // Opciones para pdf-parse - asegurar que se procesen TODAS las páginas
     const options = {
-      // Evitar usar APIs del navegador
-      max: 0, // Procesar todas las páginas
+      max: 0, // 0 = procesar todas las páginas (sin límite)
+      version: 'v1.10.100', // Versión específica si es necesario
     };
     
-    console.log('Parseando PDF...');
+    console.log('Parseando PDF (todas las páginas)...');
     
-    // Intentar parsear el PDF
+    // Intentar parsear el PDF con opciones explícitas para todas las páginas
     let data: any;
     try {
-      // Primero intentar sin opciones
-      data = await parser(buffer);
+      // Intentar primero con opciones explícitas para asegurar todas las páginas
+      data = await parser(buffer, options);
+      console.log(`PDF parseado exitosamente. Páginas procesadas: ${data?.numpages || 'desconocido'}`);
     } catch (parseError: any) {
-      // Si falla, intentar con opciones
-      console.warn('Primer intento falló, intentando con opciones:', parseError.message);
+      console.warn('Primer intento con opciones falló, intentando sin opciones:', parseError.message);
       try {
-        data = await parser(buffer, options);
+        // Fallback: intentar sin opciones
+        data = await parser(buffer);
+        console.log(`PDF parseado sin opciones. Páginas procesadas: ${data?.numpages || 'desconocido'}`);
       } catch (secondError: any) {
-        // Si aún falla, intentar sin opciones pero con manejo de errores
         console.error('Error parseando PDF:', secondError);
         throw new Error(`Error al parsear PDF: ${secondError.message}. El PDF puede estar corrupto o en un formato no soportado.`);
       }
     }
     
     const text = data?.text || data;
+    const numPages = data?.numpages || 'desconocido';
     
-    console.log(`PDF extraído: ${text.length} caracteres`);
+    console.log(`PDF extraído: ${text.length} caracteres de ${numPages} página(s)`);
     
     if (!text || text.trim().length === 0) {
       throw new Error('El PDF no contiene texto legible. Puede ser un PDF escaneado o protegido.');
     }
     
+    // Verificar si el texto parece estar completo (buscar indicadores de múltiples páginas)
+    const pageIndicators = text.match(/\b(página|page|pag)\s*\d+/gi);
+    if (pageIndicators && pageIndicators.length > 1) {
+      console.log(`Se detectaron ${pageIndicators.length} indicadores de páginas en el texto`);
+    }
+    
     // Detectar moneda del contenido del PDF
     const detectedCurrency = detectCurrencyFromText(text);
     console.log(`Moneda detectada en PDF: ${detectedCurrency}`);
+    
+    // Buscar el período del reporte en el texto (ej: "Del 1 al 30 de septiembre de 2025")
+    const periodMatch = text.match(/(?:del|from)\s+(\d{1,2})\s+(?:al|to)\s+(\d{1,2})\s+(?:de|of)\s+(\w+)\s+(?:de|of)\s+(\d{4})/i);
+    if (periodMatch) {
+      console.log(`Período detectado en PDF: ${periodMatch[0]}`);
+    }
     
     const rawTransactions: Array<{ date: string; description: string; amount: number }> = [];
     
@@ -171,6 +185,12 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
     const lines = text.split(/\r?\n/).map((line: string) => line.trim()).filter((line: string) => line.length > 0);
     
     console.log(`Procesando ${lines.length} líneas del PDF...`);
+    
+    // Log de las primeras y últimas líneas para debugging
+    if (lines.length > 0) {
+      console.log(`Primeras 3 líneas: ${lines.slice(0, 3).join(' | ')}`);
+      console.log(`Últimas 3 líneas: ${lines.slice(-3).join(' | ')}`);
+    }
     
     // Extraer transacciones con múltiples estrategias
     for (let i = 0; i < lines.length; i++) {
