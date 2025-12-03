@@ -184,6 +184,79 @@ export default function Settings() {
             </ul>
           </CardContent>
         </Card>
+
+        <Card className="border-red-200">
+          <CardHeader>
+            <CardTitle className="text-red-600">Zona de Peligro</CardTitle>
+            <CardDescription>
+              Acciones irreversibles. Ten cuidado al usar estas opciones.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive" 
+                  className="w-full"
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar todas las transacciones
+                    </>
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta acción eliminará TODAS las transacciones de tu base de datos. 
+                    Esta acción no se puede deshacer. ¿Estás seguro de que quieres continuar?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      setIsDeleting(true);
+                      try {
+                        await deleteAllTransactions();
+                        toast({
+                          title: "Transacciones eliminadas",
+                          description: "Todas las transacciones han sido eliminadas correctamente.",
+                        });
+                        // Refrescar las transacciones
+                        queryClient.invalidateQueries({ queryKey: ['transactions'] });
+                        queryClient.invalidateQueries({ queryKey: ['stats'] });
+                      } catch (error: any) {
+                        toast({
+                          title: "Error",
+                          description: error.message || "No se pudieron eliminar las transacciones",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Sí, eliminar todo
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <p className="text-xs text-muted-foreground mt-2">
+              Esto eliminará permanentemente todas tus transacciones y reportes.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
