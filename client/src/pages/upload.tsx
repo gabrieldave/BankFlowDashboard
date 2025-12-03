@@ -6,13 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { useTransactions } from "@/context/TransactionContext";
-import { Transaction } from "@/lib/mock-data";
+import { uploadFile } from "@/lib/api";
 
 export default function UploadPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { setTransactions } = useTransactions();
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -42,82 +40,38 @@ export default function UploadPage() {
     }
   };
 
-  const processFile = (file: File) => {
-    if (file.type === "application/pdf") {
-      toast({
-        title: "PDF Detectado",
-        description: "Actualmente estamos en modo prototipo. Para leer PDFs reales necesitamos activar el servidor. Por ahora, usaré datos de demostración.",
-        variant: "default",
-      });
-      startUploadSimulation(false); // False means "mock"
-    } else if (file.type === "text/csv" || file.name.endsWith('.csv')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        parseCSV(text);
-      };
-      reader.readAsText(file);
-      startUploadSimulation(true); // True means "real data processing"
-    } else {
-      // Default fallback
-      startUploadSimulation(false);
-    }
-  };
-
-  const parseCSV = (text: string) => {
-    // Very basic CSV parser for prototype
-    // Assumes format: Date, Description, Amount, Category (optional)
-    try {
-      const lines = text.split('\n');
-      const newTransactions: Transaction[] = [];
-      
-      lines.slice(1).forEach((line, index) => {
-        if (!line.trim()) return;
-        const cols = line.split(',');
-        if (cols.length >= 3) {
-          const amount = parseFloat(cols[2]);
-          newTransactions.push({
-            id: `csv-${index}`,
-            date: cols[0].trim(),
-            description: cols[1].trim(),
-            amount: Math.abs(amount),
-            type: amount >= 0 ? 'income' : 'expense',
-            category: cols[3]?.trim() || 'General',
-            merchant: cols[1].trim()
-          });
-        }
-      });
-
-      if (newTransactions.length > 0) {
-        // We wait for the animation to finish before setting data
-        setTimeout(() => {
-          setTransactions(newTransactions);
-        }, 1500);
-      }
-    } catch (e) {
-      console.error("Error parsing CSV", e);
-    }
-  };
-
-  const startUploadSimulation = (isRealProcessing: boolean) => {
+  const processFile = async (file: File) => {
     setIsUploading(true);
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 5;
-      setUploadProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          toast({
-            title: isRealProcessing ? "CSV Importado" : "Simulación Completada",
-            description: isRealProcessing 
-              ? "Tus datos han sido cargados correctamente." 
-              : "Mostrando datos de demostración (Sube un CSV para ver datos reales).",
-          });
-          setLocation("/dashboard");
-        }, 500);
-      }
-    }, 50); // Faster for prototype
+    setUploadProgress(0);
+
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => Math.min(prev + 10, 90));
+    }, 200);
+
+    try {
+      const result = await uploadFile(file);
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      setTimeout(() => {
+        toast({
+          title: "¡Archivo procesado!",
+          description: result.message,
+        });
+        setLocation("/dashboard");
+      }, 500);
+    } catch (error: any) {
+      clearInterval(progressInterval);
+      setIsUploading(false);
+      setUploadProgress(0);
+      
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo procesar el archivo",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -125,11 +79,7 @@ export default function UploadPage() {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-heading font-bold text-gray-900">Sube tus estados de cuenta</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Analizamos tus archivos automáticamente. 
-          <br/>
-          <span className="text-sm font-medium text-primary bg-blue-50 px-2 py-1 rounded-md mt-2 inline-block">
-            Nota: Sube un CSV para ver tus datos reales. Los PDFs usan datos de prueba en esta versión.
-          </span>
+          Analizamos tus archivos CSV o PDF automáticamente y categorizamos cada transacción.
         </p>
       </div>
 
@@ -158,7 +108,7 @@ export default function UploadPage() {
               
               <div className="space-y-2">
                 <h3 className="text-2xl font-semibold text-gray-900">Arrastra y suelta tu archivo aquí</h3>
-                <p className="text-muted-foreground">Recomendado: .CSV para datos reales</p>
+                <p className="text-muted-foreground">Soporta CSV y PDF (máx. 10MB)</p>
               </div>
 
               <div className="flex items-center justify-center gap-4 pt-4">
@@ -171,10 +121,17 @@ export default function UploadPage() {
                   id="file-upload" 
                   className="hidden" 
                   onChange={handleFileSelect}
-                  accept=".csv,.pdf,.xlsx"
+                  accept=".csv,.pdf"
+                  data-testid="input-file"
                 />
                 <label htmlFor="file-upload">
-                  <Button variant="outline" size="lg" className="cursor-pointer rounded-xl border-primary/20 hover:border-primary hover:bg-blue-50 text-primary font-semibold px-8" asChild>
+                  <Button 
+                    variant="outline" 
+                    size="lg" 
+                    className="cursor-pointer rounded-xl border-primary/20 hover:border-primary hover:bg-blue-50 text-primary font-semibold px-8" 
+                    asChild
+                    data-testid="button-browse"
+                  >
                     <span>Explorar archivos</span>
                   </Button>
                 </label>
@@ -193,13 +150,13 @@ export default function UploadPage() {
               
               <div className="space-y-2">
                 <h3 className="text-2xl font-semibold text-gray-900">Procesando archivo...</h3>
-                <p className="text-muted-foreground">Normalizando transacciones...</p>
+                <p className="text-muted-foreground" data-testid="text-progress">Analizando transacciones...</p>
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm font-medium text-gray-600">
-                  <span>Analizando...</span>
-                  <span>{uploadProgress}%</span>
+                  <span>Progreso</span>
+                  <span data-testid="text-percentage">{uploadProgress}%</span>
                 </div>
                 <Progress value={uploadProgress} className="h-2" />
               </div>
@@ -207,15 +164,14 @@ export default function UploadPage() {
           )}
         </AnimatePresence>
 
-        {/* Background decoration */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent to-gray-50/50 rounded-2xl" />
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
         {[
-          { icon: CheckCircle2, title: "Modo CSV Activo", desc: "Sube un CSV para ver tus datos reales" },
-          { icon: FileType, title: "PDF (Requiere Server)", desc: "La lectura de PDF requiere actualización" },
-          { icon: AlertCircle, title: "Privacidad Local", desc: "Tus datos no salen de tu navegador" }
+          { icon: CheckCircle2, title: "CSV & PDF", desc: "Procesamiento automático de ambos formatos" },
+          { icon: FileType, title: "Categorización IA", desc: "Identifica automáticamente el tipo de gasto" },
+          { icon: AlertCircle, title: "Privacidad Total", desc: "Tus datos se procesan de forma segura" }
         ].map((feature, idx) => (
           <div key={idx} className="p-4 rounded-xl bg-white shadow-sm border border-gray-100">
             <feature.icon className="w-6 h-6 text-primary mx-auto mb-3" />

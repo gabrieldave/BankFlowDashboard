@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -5,7 +6,8 @@ import {
   TrendingUp,
   Search,
   Filter,
-  Download
+  Download,
+  Loader2
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -32,31 +34,73 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { useTransactions } from "@/context/TransactionContext";
+import { getTransactions, getStats } from "@/lib/api";
+
+const CHART_COLORS = [
+  'hsl(221 83% 53%)',
+  'hsl(142 76% 36%)',
+  'hsl(43 96% 56%)',
+  'hsl(27 96% 61%)',
+  'hsl(0 84.2% 60.2%)',
+  'hsl(280 76% 53%)',
+  'hsl(340 76% 53%)',
+];
 
 export default function Dashboard() {
-  const { transactions, stats, monthlyData, categoryData } = useTransactions();
+  const { data: transactions, isLoading: loadingTransactions } = useQuery({
+    queryKey: ['transactions'],
+    queryFn: getTransactions,
+  });
+
+  const { data: stats, isLoading: loadingStats } = useQuery({
+    queryKey: ['stats'],
+    queryFn: getStats,
+  });
+
+  if (loadingTransactions || loadingStats) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Cargando datos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!transactions || !stats) {
+    return (
+      <div className="text-center space-y-4 py-12">
+        <h2 className="text-2xl font-heading font-bold">No hay datos disponibles</h2>
+        <p className="text-muted-foreground">Sube tu primer archivo para comenzar a visualizar tus finanzas.</p>
+      </div>
+    );
+  }
+
+  const categoryDataWithColors = stats.categoryData.map((cat, idx) => ({
+    ...cat,
+    color: CHART_COLORS[idx % CHART_COLORS.length]
+  }));
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900">Panel Financiero</h1>
-          <p className="text-muted-foreground">Resumen de tus finanzas basado en los datos importados.</p>
+          <h1 className="text-3xl font-heading font-bold text-gray-900" data-testid="text-dashboard-title">Panel Financiero</h1>
+          <p className="text-muted-foreground">Resumen de tus finanzas basado en {transactions.length} transacciones.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" data-testid="button-export">
             <Download className="h-4 w-4" />
             Exportar
           </Button>
-          <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20">
+          <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20" data-testid="button-new-report">
             <TrendingUp className="h-4 w-4" />
             Nuevo Reporte
           </Button>
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard 
           title="Balance Total" 
@@ -66,6 +110,7 @@ export default function Dashboard() {
           icon={Wallet}
           color="text-primary"
           bgColor="bg-blue-50"
+          testId="card-balance"
         />
         <SummaryCard 
           title="Ingresos" 
@@ -75,15 +120,17 @@ export default function Dashboard() {
           icon={ArrowUpRight}
           color="text-green-600"
           bgColor="bg-green-50"
+          testId="card-income"
         />
         <SummaryCard 
           title="Gastos" 
           amount={stats.monthlyExpenses} 
           trend="-5%" 
-          trendUp={true} // Positive because spending less is good
+          trendUp={true}
           icon={ArrowDownRight}
           color="text-red-600"
           bgColor="bg-red-50"
+          testId="card-expenses"
         />
         <SummaryCard 
           title="Tasa de Ahorro" 
@@ -94,12 +141,11 @@ export default function Dashboard() {
           icon={TrendingUp}
           color="text-purple-600"
           bgColor="bg-purple-50"
+          testId="card-savings"
         />
       </div>
 
-      {/* Main Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Balance History */}
         <Card className="lg:col-span-2 border-none shadow-sm">
           <CardHeader>
             <CardTitle className="font-heading text-lg">Evolución del Balance</CardTitle>
@@ -107,7 +153,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={stats.monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(221 83% 53%)" stopOpacity={0.3}/>
@@ -149,7 +195,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Categories */}
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="font-heading text-lg">Gastos por Categoría</CardTitle>
@@ -159,7 +204,7 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={categoryData}
+                    data={categoryDataWithColors}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -168,7 +213,7 @@ export default function Dashboard() {
                     dataKey="value"
                     stroke="none"
                   >
-                    {categoryData.map((entry, index) => (
+                    {categoryDataWithColors.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -176,7 +221,6 @@ export default function Dashboard() {
                   <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Center Text */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Total Gastos</p>
@@ -190,7 +234,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Transactions */}
       <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between bg-white border-b border-gray-50 pb-4">
           <CardTitle className="font-heading text-lg">Transacciones Recientes</CardTitle>
@@ -200,9 +243,10 @@ export default function Dashboard() {
               <Input 
                 placeholder="Buscar..." 
                 className="pl-9 h-9 w-[200px] bg-gray-50 border-gray-200 focus-visible:ring-primary/20" 
+                data-testid="input-search"
               />
             </div>
-            <Button variant="outline" size="icon" className="h-9 w-9 border-gray-200">
+            <Button variant="outline" size="icon" className="h-9 w-9 border-gray-200" data-testid="button-filter">
               <Filter className="h-4 w-4 text-muted-foreground" />
             </Button>
           </div>
@@ -219,10 +263,9 @@ export default function Dashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {transactions.map((transaction) => (
-                <TableRow key={transaction.id} className="hover:bg-slate-50/50 transition-colors">
+              {transactions.slice(0, 15).map((transaction) => (
+                <TableRow key={transaction.id} className="hover:bg-slate-50/50 transition-colors" data-testid={`row-transaction-${transaction.id}`}>
                   <TableCell className="font-medium text-muted-foreground text-xs">
-                    {/* Handle potential date parsing issues */}
                     {(() => {
                        try {
                          return new Date(transaction.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
@@ -233,8 +276,8 @@ export default function Dashboard() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
-                      <span className="font-medium text-gray-900">{transaction.merchant || transaction.description}</span>
-                      {transaction.merchant && <span className="text-xs text-muted-foreground">{transaction.description}</span>}
+                      <span className="font-medium text-gray-900">{transaction.merchant}</span>
+                      <span className="text-xs text-muted-foreground">{transaction.description}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -246,7 +289,7 @@ export default function Dashboard() {
                     transaction.type === 'income' ? 'text-green-600' : 'text-gray-900'
                   }`}>
                     {transaction.type === 'income' ? '+' : '-'}
-                    {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(transaction.amount)}
+                    {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(parseFloat(transaction.amount))}
                   </TableCell>
                   <TableCell>
                     <div className={`w-2 h-2 rounded-full mx-auto ${
@@ -263,9 +306,9 @@ export default function Dashboard() {
   );
 }
 
-function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor, isPercent = false }: any) {
+function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor, isPercent = false, testId }: any) {
   return (
-    <Card className="border-none shadow-sm hover:shadow-md transition-all duration-200">
+    <Card className="border-none shadow-sm hover:shadow-md transition-all duration-200" data-testid={testId}>
       <CardContent className="p-6">
         <div className="flex justify-between items-start mb-4">
           <div className={`p-3 rounded-xl ${bgColor}`}>
@@ -279,7 +322,7 @@ function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor
         </div>
         <div>
           <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
-          <h3 className="text-2xl font-bold text-gray-900 font-heading">
+          <h3 className="text-2xl font-bold text-gray-900 font-heading" data-testid={`${testId}-amount`}>
             {isPercent ? `${amount}%` : new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount)}
           </h3>
         </div>

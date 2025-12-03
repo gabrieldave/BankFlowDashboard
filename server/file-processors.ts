@@ -1,5 +1,13 @@
 import type { InsertTransaction } from "@shared/schema";
-import * as pdfParse from "pdf-parse";
+
+let pdfParse: any;
+
+async function getPdfParser() {
+  if (!pdfParse) {
+    pdfParse = (await import("pdf-parse")).default;
+  }
+  return pdfParse;
+}
 
 export async function parseCSV(content: string): Promise<InsertTransaction[]> {
   const lines = content.trim().split('\n');
@@ -31,7 +39,8 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
 
 export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
   try {
-    const data = await pdfParse(buffer);
+    const parser = await getPdfParser();
+    const data = await parser(buffer);
     const text = data.text;
     
     const transactions: InsertTransaction[] = [];
