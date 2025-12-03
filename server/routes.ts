@@ -145,6 +145,21 @@ export async function registerRoutes(
       // Análisis mensual
       const monthlyData = calculateMonthlyData(transactions);
 
+      // Calcular tendencia del balance (mes actual vs mes anterior)
+      let balanceTrend = 0;
+      if (monthlyData.length >= 2) {
+        const currentMonth = monthlyData[monthlyData.length - 1];
+        const previousMonth = monthlyData[monthlyData.length - 2];
+        const currentBalance = (currentMonth.balance || 0);
+        const previousBalance = (previousMonth.balance || 0);
+        
+        if (previousBalance !== 0) {
+          balanceTrend = ((currentBalance - previousBalance) / Math.abs(previousBalance)) * 100;
+        } else if (currentBalance !== 0) {
+          balanceTrend = currentBalance > 0 ? 100 : -100; // Si no había balance antes, es 100% o -100%
+        }
+      }
+
       // Análisis de tendencias (últimos 3 meses vs anteriores)
       const recentMonths = monthlyData.slice(-3);
       const previousMonths = monthlyData.slice(-6, -3);
@@ -200,6 +215,7 @@ export async function registerRoutes(
         dailyData,
         topMerchants,
         expenseTrend: parseFloat(expenseTrend.toFixed(1)),
+        balanceTrend: parseFloat(balanceTrend.toFixed(1)),
         largestExpenses,
         largestIncomes,
         totalTransactions: transactions.length,

@@ -152,8 +152,11 @@ export default function Dashboard() {
         <SummaryCard 
           title="Balance Total" 
           amount={stats.totalBalance} 
-          trend="+2.5%" 
-          trendUp={true}
+          trend={stats.balanceTrend !== undefined 
+            ? `${stats.balanceTrend >= 0 ? '+' : ''}${stats.balanceTrend.toFixed(1)}%`
+            : 'N/A'
+          }
+          trendUp={stats.balanceTrend === undefined || stats.balanceTrend >= 0}
           icon={Wallet}
           color="text-primary"
           bgColor="bg-blue-50"

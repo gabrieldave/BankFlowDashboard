@@ -20,6 +20,7 @@ export interface Stats {
   dailyData?: { date: string; name: string; income: number; expense: number }[];
   topMerchants?: { name: string; value: number }[];
   expenseTrend?: number;
+  balanceTrend?: number;
   largestExpenses?: Array<{ id: number; description: string; merchant: string; category: string; amount: number; date: string }>;
   largestIncomes?: Array<{ id: number; description: string; merchant: string; category: string; amount: number; date: string }>;
   totalTransactions?: number;
