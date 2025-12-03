@@ -1,4 +1,5 @@
 import type { InsertTransaction } from "@shared/schema";
+import { classifyTransaction, classifyTransactionsBatch } from "./ai-service";
 
 let pdfParse: any;
 
@@ -11,8 +12,9 @@ async function getPdfParser() {
 
 export async function parseCSV(content: string): Promise<InsertTransaction[]> {
   const lines = content.trim().split('\n');
-  const transactions: InsertTransaction[] = [];
+  const rawTransactions: Array<{ date: string; description: string; amount: number }> = [];
   
+  // Primero extraer todas las transacciones
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
@@ -23,16 +25,38 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
       const amount = parseFloat(cols[2]);
       if (isNaN(amount)) continue;
       
-      transactions.push({
+      rawTransactions.push({
         date: cols[0] || new Date().toISOString().split('T')[0],
         description: cols[1] || 'Sin descripción',
-        amount: Math.abs(amount).toString(),
-        type: amount >= 0 ? 'income' : 'expense',
-        category: cols[3] || categorizeTransaction(cols[1]),
-        merchant: cols[4] || cols[1] || 'Desconocido',
+        amount: amount,
       });
     }
   }
+
+  if (rawTransactions.length === 0) {
+    return [];
+  }
+
+  // Clasificar todas las transacciones usando IA (en batch para eficiencia)
+  const classifications = await classifyTransactionsBatch(rawTransactions);
+  
+  // Combinar datos con clasificaciones
+  const transactions: InsertTransaction[] = rawTransactions.map((raw, idx) => {
+    const classification = classifications[idx] || {
+      category: 'General',
+      merchant: raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
+      confidence: 0.5,
+    };
+
+    return {
+      date: raw.date,
+      description: raw.description,
+      amount: Math.abs(raw.amount).toString(),
+      type: raw.amount >= 0 ? 'income' : 'expense',
+      category: classification.category,
+      merchant: classification.merchant,
+    };
+  });
   
   return transactions;
 }
@@ -43,15 +67,45 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
     const data = await parser(buffer);
     const text = data.text;
     
-    const transactions: InsertTransaction[] = [];
+    const rawTransactions: Array<{ date: string; description: string; amount: number }> = [];
     const lines = text.split('\n');
     
+    // Extraer todas las transacciones primero
     for (const line of lines) {
       const transaction = extractTransactionFromLine(line);
       if (transaction) {
-        transactions.push(transaction);
+        rawTransactions.push({
+          date: transaction.date,
+          description: transaction.description,
+          amount: parseFloat(transaction.amount) * (transaction.type === 'income' ? 1 : -1),
+        });
       }
     }
+
+    if (rawTransactions.length === 0) {
+      return [];
+    }
+
+    // Clasificar todas las transacciones usando IA
+    const classifications = await classifyTransactionsBatch(rawTransactions);
+    
+    // Combinar datos con clasificaciones
+    const transactions: InsertTransaction[] = rawTransactions.map((raw, idx) => {
+      const classification = classifications[idx] || {
+        category: 'General',
+        merchant: raw.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
+        confidence: 0.5,
+      };
+
+      return {
+        date: raw.date,
+        description: raw.description,
+        amount: Math.abs(raw.amount).toString(),
+        type: raw.amount >= 0 ? 'income' : 'expense',
+        category: classification.category,
+        merchant: classification.merchant,
+      };
+    });
     
     return transactions;
   } catch (error) {
@@ -60,7 +114,7 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
   }
 }
 
-function extractTransactionFromLine(line: string): InsertTransaction | null {
+function extractTransactionFromLine(line: string): { date: string; description: string; amount: string } | null {
   const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/;
   const amountPattern = /([\-]?\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2}))/;
   
@@ -91,9 +145,6 @@ function extractTransactionFromLine(line: string): InsertTransaction | null {
     date,
     description,
     amount: Math.abs(amount).toString(),
-    type: amount >= 0 ? 'income' : 'expense',
-    category: categorizeTransaction(description),
-    merchant: extractMerchant(description),
   };
 }
 
@@ -110,30 +161,5 @@ function normalizeDate(dateStr: string): string {
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 }
 
-function categorizeTransaction(description: string): string {
-  const desc = description.toLowerCase();
-  
-  const categories: Record<string, string[]> = {
-    'Alimentación': ['mercadona', 'carrefour', 'lidl', 'dia', 'supermercado', 'alimentacion'],
-    'Transporte': ['uber', 'cabify', 'gasolinera', 'repsol', 'cepsa', 'metro', 'renfe'],
-    'Restaurantes': ['restaurante', 'vips', 'mcdonalds', 'burger', 'pizza', 'cafe', 'bar'],
-    'Entretenimiento': ['netflix', 'spotify', 'hbo', 'prime', 'cine', 'teatro'],
-    'Compras': ['zara', 'amazon', 'ebay', 'corte ingles', 'fnac', 'media markt'],
-    'Salud': ['farmacia', 'hospital', 'medico', 'clinica', 'dentista'],
-    'Vivienda': ['alquiler', 'hipoteca', 'luz', 'agua', 'gas', 'internet'],
-    'Salario': ['nomina', 'salario', 'sueldo', 'paga'],
-  };
-  
-  for (const [category, keywords] of Object.entries(categories)) {
-    if (keywords.some(keyword => desc.includes(keyword))) {
-      return category;
-    }
-  }
-  
-  return 'General';
-}
-
-function extractMerchant(description: string): string {
-  const words = description.split(' ').filter(w => w.length > 2);
-  return words.slice(0, 3).join(' ') || 'Desconocido';
-}
+// Funciones de categorización básica movidas a ai-service.ts
+// Se mantienen aquí solo como fallback si la IA no está disponible

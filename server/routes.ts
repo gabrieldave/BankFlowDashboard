@@ -100,18 +100,86 @@ export async function registerRoutes(
       const totalBalance = income - expenses;
       const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
 
+      // Análisis por categoría
       const categoryTotals: Record<string, number> = {};
+      const categoryCounts: Record<string, number> = {};
+      
       transactions
         .filter(t => t.type === 'expense')
         .forEach(t => {
           categoryTotals[t.category] = (categoryTotals[t.category] || 0) + parseFloat(t.amount);
+          categoryCounts[t.category] = (categoryCounts[t.category] || 0) + 1;
         });
 
       const categoryData = Object.entries(categoryTotals)
-        .map(([name, value]) => ({ name, value }))
+        .map(([name, value]) => ({ 
+          name, 
+          value,
+          count: categoryCounts[name] || 0,
+          average: value / (categoryCounts[name] || 1)
+        }))
         .sort((a, b) => b.value - a.value);
 
+      // Análisis por comercio (top merchants)
+      const merchantTotals: Record<string, number> = {};
+      transactions
+        .filter(t => t.type === 'expense')
+        .forEach(t => {
+          merchantTotals[t.merchant] = (merchantTotals[t.merchant] || 0) + parseFloat(t.amount);
+        });
+
+      const topMerchants = Object.entries(merchantTotals)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10);
+
+      // Análisis mensual
       const monthlyData = calculateMonthlyData(transactions);
+
+      // Análisis de tendencias (últimos 3 meses vs anteriores)
+      const recentMonths = monthlyData.slice(-3);
+      const previousMonths = monthlyData.slice(-6, -3);
+      
+      const recentAvgExpenses = recentMonths.length > 0 
+        ? recentMonths.reduce((acc, m) => acc + m.expense, 0) / recentMonths.length 
+        : 0;
+      const previousAvgExpenses = previousMonths.length > 0
+        ? previousMonths.reduce((acc, m) => acc + m.expense, 0) / previousMonths.length
+        : 0;
+      
+      const expenseTrend = previousAvgExpenses > 0 
+        ? ((recentAvgExpenses - previousAvgExpenses) / previousAvgExpenses) * 100 
+        : 0;
+
+      // Análisis diario (últimos 30 días)
+      const dailyData = calculateDailyData(transactions);
+
+      // Transacciones más grandes
+      const largestExpenses = transactions
+        .filter(t => t.type === 'expense')
+        .map(t => ({
+          id: t.id,
+          description: t.description,
+          merchant: t.merchant,
+          category: t.category,
+          amount: parseFloat(t.amount),
+          date: t.date,
+        }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5);
+
+      const largestIncomes = transactions
+        .filter(t => t.type === 'income')
+        .map(t => ({
+          id: t.id,
+          description: t.description,
+          merchant: t.merchant,
+          category: t.category,
+          amount: parseFloat(t.amount),
+          date: t.date,
+        }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5);
 
       res.json({
         totalBalance: parseFloat(totalBalance.toFixed(2)),
@@ -120,6 +188,15 @@ export async function registerRoutes(
         savingsRate: parseFloat(savingsRate.toFixed(1)),
         categoryData,
         monthlyData,
+        dailyData,
+        topMerchants,
+        expenseTrend: parseFloat(expenseTrend.toFixed(1)),
+        largestExpenses,
+        largestIncomes,
+        totalTransactions: transactions.length,
+        avgTransactionAmount: transactions.length > 0 
+          ? parseFloat((expenses / transactions.filter(t => t.type === 'expense').length).toFixed(2))
+          : 0,
       });
     } catch (error: any) {
       console.error("Error calculando estadísticas:", error);
@@ -180,11 +257,48 @@ function calculateMonthlyData(transactions: any[]) {
   
   return Object.entries(monthlyTotals)
     .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-6)
+    .slice(-12) // Últimos 12 meses
     .map(([key, { income, expense }]) => {
       const [year, month] = key.split('-');
       return {
-        name: monthNames[parseInt(month) - 1],
+        name: `${monthNames[parseInt(month) - 1]} ${year.slice(2)}`,
+        income: parseFloat(income.toFixed(2)),
+        expense: parseFloat(expense.toFixed(2)),
+        balance: parseFloat((income - expense).toFixed(2)),
+      };
+    });
+}
+
+function calculateDailyData(transactions: any[]) {
+  const dailyTotals: Record<string, { income: number; expense: number }> = {};
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  
+  transactions.forEach(t => {
+    const date = new Date(t.date);
+    if (isNaN(date.getTime()) || date < thirtyDaysAgo) return;
+    
+    const dayKey = date.toISOString().split('T')[0];
+    
+    if (!dailyTotals[dayKey]) {
+      dailyTotals[dayKey] = { income: 0, expense: 0 };
+    }
+    
+    const amount = parseFloat(t.amount);
+    if (t.type === 'income') {
+      dailyTotals[dayKey].income += amount;
+    } else {
+      dailyTotals[dayKey].expense += amount;
+    }
+  });
+
+  return Object.entries(dailyTotals)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, { income, expense }]) => {
+      const date = new Date(key);
+      return {
+        date: key,
+        name: `${date.getDate()}/${date.getMonth() + 1}`,
         income: parseFloat(income.toFixed(2)),
         expense: parseFloat(expense.toFixed(2)),
       };

@@ -14,8 +14,15 @@ export interface Stats {
   monthlyIncome: number;
   monthlyExpenses: number;
   savingsRate: number;
-  categoryData: { name: string; value: number }[];
-  monthlyData: { name: string; income: number; expense: number }[];
+  categoryData: { name: string; value: number; count?: number; average?: number }[];
+  monthlyData: { name: string; income: number; expense: number; balance?: number }[];
+  dailyData?: { date: string; name: string; income: number; expense: number }[];
+  topMerchants?: { name: string; value: number }[];
+  expenseTrend?: number;
+  largestExpenses?: Array<{ id: number; description: string; merchant: string; category: string; amount: number; date: string }>;
+  largestIncomes?: Array<{ id: number; description: string; merchant: string; category: string; amount: number; date: string }>;
+  totalTransactions?: number;
+  avgTransactionAmount?: number;
 }
 
 export async function uploadFile(file: File): Promise<{ message: string; count: number; transactions: Transaction[] }> {

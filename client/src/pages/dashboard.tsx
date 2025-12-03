@@ -156,8 +156,12 @@ export default function Dashboard() {
                 <AreaChart data={stats.monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(221 83% 53%)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(221 83% 53%)" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(0 84.2% 60.2%)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(0 84.2% 60.2%)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
@@ -181,13 +185,24 @@ export default function Dashboard() {
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
                     }}
                   />
+                  <Legend />
                   <Area 
                     type="monotone" 
                     dataKey="income" 
-                    stroke="hsl(221 83% 53%)" 
-                    strokeWidth={3}
+                    stroke="hsl(142 76% 36%)" 
+                    strokeWidth={2}
                     fillOpacity={1} 
-                    fill="url(#colorIncome)" 
+                    fill="url(#colorIncome)"
+                    name="Ingresos"
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="expense" 
+                    stroke="hsl(0 84.2% 60.2%)" 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorExpense)"
+                    name="Gastos"
                   />
                 </AreaChart>
               </ResponsiveContainer>
