@@ -93,8 +93,16 @@ export async function updateTransactionsCurrency(currency: string = 'MXN'): Prom
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Error actualizando currency');
+    // Intentar parsear como JSON, si falla, usar el texto
+    let errorMessage = 'Error actualizando currency';
+    try {
+      const error = await response.json();
+      errorMessage = error.error || errorMessage;
+    } catch (e) {
+      const text = await response.text();
+      errorMessage = text || errorMessage;
+    }
+    throw new Error(errorMessage);
   }
 
   return response.json();

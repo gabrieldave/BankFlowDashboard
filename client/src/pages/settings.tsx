@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { updateTransactionsCurrency } from "@/lib/api";
+import { updateTransactionsCurrency, deleteAllTransactions } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 
 const CURRENCIES = [
   { code: 'MXN', name: 'Peso Mexicano', symbol: '$' },
@@ -27,6 +29,7 @@ export default function Settings() {
   const [selectedCurrency, setSelectedCurrency] = useState<string>('MXN');
   const [isSaving, setIsSaving] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Cargar moneda guardada del localStorage
   useEffect(() => {
