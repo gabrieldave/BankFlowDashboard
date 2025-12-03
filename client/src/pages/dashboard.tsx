@@ -1,0 +1,279 @@
+import { 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  DollarSign, 
+  Wallet, 
+  TrendingUp,
+  Search,
+  Filter,
+  Download
+} from "lucide-react";
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
+} from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
+import { MOCK_TRANSACTIONS, SUMMARY_STATS, MONTHLY_DATA, CATEGORY_DATA } from "@/lib/mock-data";
+
+export default function Dashboard() {
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-heading font-bold text-gray-900">Panel Financiero</h1>
+          <p className="text-muted-foreground">Bienvenido de nuevo, aquí está el resumen de tus finanzas.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2">
+            <Download className="h-4 w-4" />
+            Exportar
+          </Button>
+          <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20">
+            <TrendingUp className="h-4 w-4" />
+            Nuevo Reporte
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SummaryCard 
+          title="Balance Total" 
+          amount={SUMMARY_STATS.totalBalance} 
+          trend="+2.5%" 
+          trendUp={true}
+          icon={Wallet}
+          color="text-primary"
+          bgColor="bg-blue-50"
+        />
+        <SummaryCard 
+          title="Ingresos (Mes)" 
+          amount={SUMMARY_STATS.monthlyIncome} 
+          trend="+12%" 
+          trendUp={true}
+          icon={ArrowUpRight}
+          color="text-green-600"
+          bgColor="bg-green-50"
+        />
+        <SummaryCard 
+          title="Gastos (Mes)" 
+          amount={SUMMARY_STATS.monthlyExpenses} 
+          trend="-5%" 
+          trendUp={true} // Positive because spending less is good
+          icon={ArrowDownRight}
+          color="text-red-600"
+          bgColor="bg-red-50"
+        />
+        <SummaryCard 
+          title="Tasa de Ahorro" 
+          amount={SUMMARY_STATS.savingsRate} 
+          isPercent={true}
+          trend="+4.2%" 
+          trendUp={true}
+          icon={TrendingUp}
+          color="text-purple-600"
+          bgColor="bg-purple-50"
+        />
+      </div>
+
+      {/* Main Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Balance History */}
+        <Card className="lg:col-span-2 border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-heading text-lg">Evolución del Balance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={MONTHLY_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(221 83% 53%)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(221 83% 53%)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#6b7280', fontSize: 12 }}
+                    dy={10}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#6b7280', fontSize: 12 }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'white', 
+                      borderRadius: '8px', 
+                      border: '1px solid #e5e7eb',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
+                    }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="income" 
+                    stroke="hsl(221 83% 53%)" 
+                    strokeWidth={3}
+                    fillOpacity={1} 
+                    fill="url(#colorIncome)" 
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Categories */}
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-heading text-lg">Gastos por Categoría</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px] w-full relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={CATEGORY_DATA}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {CATEGORY_DATA.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Center Text */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-xl font-bold text-foreground">€1,556</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Transactions */}
+      <Card className="border-none shadow-sm overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between bg-white border-b border-gray-50 pb-4">
+          <CardTitle className="font-heading text-lg">Transacciones Recientes</CardTitle>
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Buscar..." 
+                className="pl-9 h-9 w-[200px] bg-gray-50 border-gray-200 focus-visible:ring-primary/20" 
+              />
+            </div>
+            <Button variant="outline" size="icon" className="h-9 w-9 border-gray-200">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-gray-50/50">
+              <TableRow>
+                <TableHead className="w-[100px]">Fecha</TableHead>
+                <TableHead>Descripción</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-right">Monto</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {MOCK_TRANSACTIONS.map((transaction) => (
+                <TableRow key={transaction.id} className="hover:bg-slate-50/50 transition-colors">
+                  <TableCell className="font-medium text-muted-foreground text-xs">
+                    {new Date(transaction.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-gray-900">{transaction.merchant}</span>
+                      <span className="text-xs text-muted-foreground">{transaction.description}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-0 font-normal">
+                      {transaction.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className={`text-right font-semibold ${
+                    transaction.type === 'income' ? 'text-green-600' : 'text-gray-900'
+                  }`}>
+                    {transaction.type === 'income' ? '+' : '-'}
+                    {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(transaction.amount)}
+                  </TableCell>
+                  <TableCell>
+                    <div className={`w-2 h-2 rounded-full mx-auto ${
+                      transaction.type === 'income' ? 'bg-green-500' : 'bg-slate-300'
+                    }`} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SummaryCard({ title, amount, trend, trendUp, icon: Icon, color, bgColor, isPercent = false }: any) {
+  return (
+    <Card className="border-none shadow-sm hover:shadow-md transition-all duration-200">
+      <CardContent className="p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div className={`p-3 rounded-xl ${bgColor}`}>
+            <Icon className={`h-5 w-5 ${color}`} />
+          </div>
+          <Badge variant={trendUp ? "default" : "destructive"} className={`${
+            trendUp ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"
+          } border-0`}>
+            {trend}
+          </Badge>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
+          <h3 className="text-2xl font-bold text-gray-900 font-heading">
+            {isPercent ? `${amount}%` : new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount)}
+          </h3>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
