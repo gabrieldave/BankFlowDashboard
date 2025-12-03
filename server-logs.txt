@@ -1,28 +1,22 @@
-11:55:10 PM [express] serving on port 5000
+11:56:34 PM [express] serving on port 5000
 [PDF Parser] Usando IA para parsing. API_KEY presente: SÍ (sk-c0f2f1e...)
 Procesando PDF con DeepSeek Vision API (IA)...
 [Vision Service] API Key detectada: sk-c0f2f1e...
 Iniciando procesamiento de PDF con DeepSeek Vision API...
 Tamaño del buffer: 150746 bytes
-Warning: Please use the `legacy` build in Node.js environments.
-Error convirtiendo PDF a imágenes: Error: Please provide binary data as `Uint8Array`, rather than `Buffer`.
-    at getDataProp (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs:14094:11)
-    at Module.getDocument (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs:20667:27)
-    at pdfToImages (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:57:34)
-    at async parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:271:20)
+Error convirtiendo PDF a imágenes: Error: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
+    at <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs:21632:31)
+Error procesando PDF con Vision: Error: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
+    at pdfToImages (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:90:11)
+    at async parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:273:20)
     at async parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:74:20)
     at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
-Error procesando PDF con Vision: Error: Error convirtiendo PDF a imágenes: Please provide binary data as `Uint8Array`, rather than `Buffer`.
-    at pdfToImages (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:88:11)
-    at async parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:271:20)
+❌ [PDF Parser] Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
+📋 [PDF Parser] Stack trace: Error: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".
+    at parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:367:11)
     at async parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:74:20)
     at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
-❌ [PDF Parser] Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Please provide binary data as `Uint8Array`, rather than `Buffer`.
-📋 [PDF Parser] Stack trace: Error: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Please provide binary data as `Uint8Array`, rather than `Buffer`.
-    at parsePDFWithVision (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\pdf-vision-service.ts:365:11)
-    at async parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:74:20)
-    at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
-Error específico en PDF: Error: Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Please provide binary data as `Uint8Array`, rather than `Buffer`.. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente.
+Error específico en PDF: Error: Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: "Cannot find module '\\cdnjs.cloudflare.com\ajax\libs\pdf.js\5.4.449\pdf.worker.min.js' imported from C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\node_modules\pdfjs-dist\legacy\build\pdf.mjs".. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente.
     at parsePDF (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\file-processors.ts:80:11)
     at async <anonymous> (C:\Users\dakyo\Documents\Proyectos de apps\BankFlowDashboard\server\routes.ts:35:26)
-11:55:35 PM [express] POST /api/upload 400 in 599ms :: {"error":"Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Please provide binary data as `Uint8Array`, rather than `Buffer`.. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente."}
+11:57:05 PM [express] POST /api/upload 400 in 22633ms :: {"error":"Error procesando PDF con IA: Error procesando PDF con DeepSeek Vision: Error convirtiendo PDF a imágenes: Setting up fake worker failed: \"Cannot find module '\\\\cdnjs.cloudflare.com\\ajax\\libs\\pdf.js\\5.4.449\\pdf.worker.min.js' imported from C:\\Users\\dakyo\\Documents\\Proyectos de apps\\BankFlowDashboard\\node_modules\\pdfjs-dist\\legacy\\build\\pdf.mjs\".. Asegúrate de que DEEPSEEK_API_KEY esté configurada correctamente."}
