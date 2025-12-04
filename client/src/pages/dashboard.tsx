@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useDeferredValue } from "react";
+import { useLocation } from "wouter";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -62,6 +63,7 @@ const CHART_COLORS = [
 ];
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -500,6 +502,55 @@ export default function Dashboard() {
     }
   };
 
+  // Función para exportar transacciones a CSV
+  const handleExportToCSV = () => {
+    if (!filteredTransactions || filteredTransactions.length === 0) {
+      return;
+    }
+
+    // Crear encabezados CSV
+    const headers = ['Fecha', 'Descripción', 'Comercio', 'Categoría', 'Tipo', 'Monto', 'Moneda', 'Banco'];
+    const rows = filteredTransactions.map(t => {
+      const amount = parseFloat(t.amount || '0');
+      return [
+        t.date || '',
+        (t.description || '').replace(/"/g, '""'), // Escapar comillas
+        (t.merchant || '').replace(/"/g, '""'),
+        t.category || '',
+        t.type === 'income' ? 'Ingreso' : 'Gasto',
+        amount.toFixed(2),
+        t.currency || 'MXN',
+        t.bank || ''
+      ];
+    });
+
+    // Crear contenido CSV
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // Crear blob y descargar
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM para Excel
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileName = `transacciones_${dateStr}.csv`;
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Función para redirigir a subir nuevo archivo
+  const handleNewReport = () => {
+    setLocation('/');
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -515,11 +566,21 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" data-testid="button-export">
+          <Button 
+            variant="outline" 
+            className="gap-2" 
+            data-testid="button-export"
+            onClick={handleExportToCSV}
+            disabled={!filteredTransactions || filteredTransactions.length === 0}
+          >
             <Download className="h-4 w-4" />
             Exportar
           </Button>
-          <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20" data-testid="button-new-report">
+          <Button 
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20" 
+            data-testid="button-new-report"
+            onClick={handleNewReport}
+          >
             <TrendingUp className="h-4 w-4" />
             Nuevo Reporte
           </Button>
@@ -535,6 +596,10 @@ export default function Dashboard() {
             : 'N/A'
           }
           trendUp={stats?.balanceTrend === undefined || stats.balanceTrend >= 0}
+          trendExplanation={stats?.balanceTrend !== undefined 
+            ? `Tu balance ${stats.balanceTrend >= 0 ? 'aumentó' : 'disminuyó'} un ${Math.abs(stats.balanceTrend).toFixed(1)}% comparado con el mes anterior. ${stats.balanceTrend >= 0 ? '¡Excelente progreso financiero!' : 'Revisa tus gastos para mejorar tu balance.'}`
+            : 'Tu balance total representa la diferencia entre todos tus ingresos y gastos registrados.'
+          }
           icon={Wallet}
           color="text-primary"
           bgColor="bg-blue-50"
@@ -605,7 +670,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              {!stats?.monthlyData || !Array.isArray(stats.monthlyData) || stats.monthlyData.length === 0 || chartData.length === 0 ? (
+              {!chartData || chartData.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center space-y-2">
                     <p className="text-sm">No hay datos para mostrar en el gráfico</p>
@@ -706,6 +771,15 @@ export default function Dashboard() {
                         fillOpacity={1} 
                         fill="url(#colorExpense)"
                         name="Gastos"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="balance" 
+                        stroke="hsl(221 83% 53%)" 
+                        strokeWidth={2}
+                        fillOpacity={0.3} 
+                        fill="url(#colorBalance)"
+                        name="Balance"
                       />
                     </>
                   )}
