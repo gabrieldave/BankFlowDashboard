@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useDeferredValue, startTransition } from "react";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -31,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
@@ -69,158 +70,294 @@ export default function Dashboard() {
   const [filterBank, setFilterBank] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'all' | 'monthly' | 'weekly'>('all');
   
-  const { data: transactions, isLoading: loadingTransactions } = useQuery({
+  // Usar deferred values para evitar bloqueos en el UI
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const deferredFilterType = useDeferredValue(filterType);
+  const deferredFilterCategory = useDeferredValue(filterCategory);
+  const deferredFilterMonth = useDeferredValue(filterMonth);
+  const deferredFilterWeek = useDeferredValue(filterWeek);
+  const deferredFilterBank = useDeferredValue(filterBank);
+  
+  const { data: transactions, isLoading: loadingTransactions, error: transactionsError } = useQuery({
     queryKey: ['transactions'],
     queryFn: getTransactions,
+    retry: 2,
+    staleTime: 30000, // Cache por 30 segundos
   });
 
-  const { data: stats, isLoading: loadingStats } = useQuery({
+  const { data: stats, isLoading: loadingStats, error: statsError } = useQuery({
     queryKey: ['stats'],
     queryFn: getStats,
+    retry: 2,
+    staleTime: 30000, // Cache por 30 segundos
   });
 
-  // Obtener categorías únicas para el filtro
+  // Obtener categorías únicas para el filtro (optimizado)
   const availableCategories = useMemo(() => {
-    if (!transactions) return [];
-    const categories = new Set(transactions.map(t => t.category));
-    return Array.from(categories).sort();
+    if (!transactions || transactions.length === 0) return [];
+    try {
+      const categories = new Set<string>();
+      transactions.forEach(t => {
+        if (t?.category) {
+          categories.add(t.category);
+        }
+      });
+      return Array.from(categories).sort();
+    } catch (error) {
+      console.error('Error calculando categorías:', error);
+      return [];
+    }
   }, [transactions]);
 
-  // Obtener meses únicos disponibles en las transacciones
+  // Obtener meses únicos disponibles en las transacciones (optimizado)
   const availableMonths = useMemo(() => {
-    if (!transactions) return [];
-    const monthSet = new Set<string>();
-    transactions.forEach(t => {
-      try {
-        const date = new Date(t.date);
-        if (!isNaN(date.getTime())) {
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          const monthLabel = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-          monthSet.add(JSON.stringify({ key: monthKey, label: monthLabel }));
+    if (!transactions || transactions.length === 0) return [];
+    try {
+      const monthMap = new Map<string, string>();
+      transactions.forEach(t => {
+        try {
+          if (!t?.date) return;
+          const date = new Date(t.date);
+          if (!isNaN(date.getTime())) {
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthMap.has(monthKey)) {
+              const monthLabel = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+              monthMap.set(monthKey, monthLabel);
+            }
+          }
+        } catch (e) {
+          // Ignorar fechas inválidas
         }
-      } catch (e) {
-        // Ignorar fechas inválidas
-      }
-    });
-    return Array.from(monthSet)
-      .map(m => JSON.parse(m))
-      .sort((a, b) => b.key.localeCompare(a.key));
+      });
+      return Array.from(monthMap.entries())
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => b.key.localeCompare(a.key));
+    } catch (error) {
+      console.error('Error calculando meses:', error);
+      return [];
+    }
   }, [transactions]);
 
-  // Obtener semanas disponibles
+  // Obtener semanas disponibles (optimizado)
   const availableWeeks = useMemo(() => {
-    if (!transactions) return [];
-    const weekSet = new Set<string>();
-    transactions.forEach(t => {
-      try {
-        const date = new Date(t.date);
-        if (!isNaN(date.getTime())) {
-          const weekStart = new Date(date);
-          weekStart.setDate(date.getDate() - date.getDay()); // Domingo de la semana
-          const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
-          const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-          weekSet.add(JSON.stringify({ key: weekKey, label: weekLabel }));
+    if (!transactions || transactions.length === 0) return [];
+    try {
+      const weekMap = new Map<string, string>();
+      transactions.forEach(t => {
+        try {
+          if (!t?.date) return;
+          const date = new Date(t.date);
+          if (!isNaN(date.getTime())) {
+            const weekStart = new Date(date);
+            weekStart.setDate(date.getDate() - date.getDay()); // Domingo de la semana
+            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
+            if (!weekMap.has(weekKey)) {
+              const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+              weekMap.set(weekKey, weekLabel);
+            }
+          }
+        } catch (e) {
+          // Ignorar fechas inválidas
         }
-      } catch (e) {
-        // Ignorar fechas inválidas
-      }
-    });
-    return Array.from(weekSet)
-      .map(w => JSON.parse(w))
-      .sort((a, b) => b.key.localeCompare(a.key));
+      });
+      return Array.from(weekMap.entries())
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => b.key.localeCompare(a.key));
+    } catch (error) {
+      console.error('Error calculando semanas:', error);
+      return [];
+    }
   }, [transactions]);
 
-  // Obtener bancos únicos disponibles
+  // Obtener bancos únicos disponibles (optimizado)
   const availableBanks = useMemo(() => {
-    if (!transactions) return [];
-    const bankSet = new Set<string>();
-    transactions.forEach(t => {
-      if (t.bank && t.bank.trim()) {
-        bankSet.add(t.bank.trim());
-      }
-    });
-    return Array.from(bankSet).sort();
+    if (!transactions || transactions.length === 0) return [];
+    try {
+      const bankSet = new Set<string>();
+      transactions.forEach(t => {
+        if (t?.bank && typeof t.bank === 'string' && t.bank.trim()) {
+          bankSet.add(t.bank.trim());
+        }
+      });
+      return Array.from(bankSet).sort();
+    } catch (error) {
+      console.error('Error calculando bancos:', error);
+      return [];
+    }
   }, [transactions]);
 
-  // Filtrar y ordenar transacciones
+  // Filtrar y ordenar transacciones (optimizado con manejo de errores y deferred values)
   const filteredTransactions = useMemo(() => {
-    if (!transactions) return [];
+    if (!transactions || transactions.length === 0) return [];
     
-    let filtered = [...transactions];
-    
-    // Filtrar por tipo
-    if (filterType !== 'all') {
-      filtered = filtered.filter(t => t.type === filterType);
-    }
-    
-    // Filtrar por categoría
-    if (filterCategory !== 'all') {
-      filtered = filtered.filter(t => t.category === filterCategory);
-    }
-    
-    // Filtrar por mes
-    if (filterMonth !== 'all') {
-      filtered = filtered.filter(t => {
+    try {
+      let filtered = [...transactions];
+      
+      // Filtrar por tipo
+      if (deferredFilterType !== 'all') {
+        filtered = filtered.filter(t => t.type === deferredFilterType);
+      }
+      
+      // Filtrar por categoría
+      if (deferredFilterCategory !== 'all') {
+        filtered = filtered.filter(t => t.category === deferredFilterCategory);
+      }
+      
+      // Filtrar por mes
+      if (deferredFilterMonth !== 'all') {
+        filtered = filtered.filter(t => {
+          try {
+            const date = new Date(t.date);
+            if (isNaN(date.getTime())) return false;
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            return monthKey === deferredFilterMonth;
+          } catch (e) {
+            return false;
+          }
+        });
+      }
+      
+      // Filtrar por semana
+      if (deferredFilterWeek !== 'all') {
+        filtered = filtered.filter(t => {
+          try {
+            const date = new Date(t.date);
+            if (isNaN(date.getTime())) return false;
+            const weekStart = new Date(date);
+            weekStart.setDate(date.getDate() - date.getDay());
+            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
+            return weekKey === deferredFilterWeek;
+          } catch (e) {
+            return false;
+          }
+        });
+      }
+      
+      // Filtrar por banco
+      if (deferredFilterBank !== 'all') {
+        filtered = filtered.filter(t => t.bank && t.bank.trim().toLowerCase() === deferredFilterBank.toLowerCase());
+      }
+      
+      // Aplicar búsqueda
+      if (deferredSearchQuery.trim()) {
+        const query = deferredSearchQuery.toLowerCase();
+        filtered = filtered.filter(t => {
+          try {
+            return (
+              (t.description || '').toLowerCase().includes(query) ||
+              (t.merchant || '').toLowerCase().includes(query) ||
+              (t.category || '').toLowerCase().includes(query) ||
+              (t.amount || '').includes(query)
+            );
+          } catch (e) {
+            return false;
+          }
+        });
+      }
+      
+      // Ordenar por fecha (más recientes primero)
+      filtered.sort((a, b) => {
         try {
-          const date = new Date(t.date);
-          if (isNaN(date.getTime())) return false;
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          return monthKey === filterMonth;
+          const dateA = new Date(a.date || 0).getTime();
+          const dateB = new Date(b.date || 0).getTime();
+          return dateB - dateA;
         } catch (e) {
-          return false;
+          return 0;
         }
       });
+      
+      return filtered;
+    } catch (error) {
+      console.error('Error filtrando transacciones:', error);
+      return [];
     }
-    
-    // Filtrar por semana
-    if (filterWeek !== 'all') {
-      filtered = filtered.filter(t => {
-        try {
-          const date = new Date(t.date);
-          if (isNaN(date.getTime())) return false;
-          const weekStart = new Date(date);
-          weekStart.setDate(date.getDate() - date.getDay());
-          const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
-          return weekKey === filterWeek;
-        } catch (e) {
-          return false;
-        }
-      });
-    }
-    
-    // Filtrar por banco
-    if (filterBank !== 'all') {
-      filtered = filtered.filter(t => t.bank && t.bank.trim().toLowerCase() === filterBank.toLowerCase());
-    }
-    
-    // Aplicar búsqueda
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(t => 
-        t.description.toLowerCase().includes(query) ||
-        t.merchant.toLowerCase().includes(query) ||
-        t.category.toLowerCase().includes(query) ||
-        t.amount.includes(query)
-      );
-    }
-    
-    // Ordenar por fecha (más recientes primero)
-    filtered.sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return dateB - dateA;
-    });
-    
-    return filtered;
-  }, [transactions, searchQuery, filterType, filterCategory, filterMonth, filterWeek, filterBank]);
+  }, [transactions, deferredSearchQuery, deferredFilterType, deferredFilterCategory, deferredFilterMonth, deferredFilterWeek, deferredFilterBank]);
 
+  // Mostrar estado de carga con skeleton
   if (loadingTransactions || loadingStats) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">Cargando datos...</p>
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-32" />
         </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4 rounded" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-32 mb-1" />
+                <Skeleton className="h-4 w-40" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-64 w-full" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center space-y-2">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+            <p className="text-sm text-muted-foreground">Cargando datos financieros...</p>
+            <p className="text-xs text-muted-foreground">Por favor espera, esto puede tomar unos segundos</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar errores
+  if (transactionsError || statsError) {
+    return (
+      <div className="text-center space-y-4 py-12">
+        <h2 className="text-2xl font-heading font-bold text-red-600">Error al cargar datos</h2>
+        <p className="text-muted-foreground">
+          {transactionsError?.message || statsError?.message || 'Ocurrió un error al cargar los datos. Por favor, intenta recargar la página.'}
+        </p>
+        <Button 
+          onClick={() => window.location.reload()}
+          className="mt-4"
+        >
+          Recargar página
+        </Button>
       </div>
     );
   }

@@ -510,7 +510,7 @@ export class PocketBaseStorage implements IStorage {
       category: String(item.category || 'Sin categoría').trim(),
       merchant: String(item.merchant || '').trim(),
       currency: String(item.currency || 'MXN').trim().toUpperCase(),
-      bank: item.bank ? String(item.bank).trim() : undefined, // Mantener undefined para compatibilidad con datos antiguos
+      bank: item.bank && String(item.bank).trim() ? String(item.bank).trim() : undefined, // Solo incluir si tiene valor válido
       createdAt: item.created ? new Date(item.created) : new Date(),
     }));
     
@@ -722,6 +722,7 @@ export class PocketBaseStorage implements IStorage {
       category: data.category,
       merchant: data.merchant,
       currency: data.currency || "MXN",
+      bank: (data as any).bank && String((data as any).bank).trim() ? String((data as any).bank).trim() : undefined,
       createdAt: data.created ? new Date(data.created) : new Date(),
     };
   }
