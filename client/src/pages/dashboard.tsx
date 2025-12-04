@@ -387,24 +387,38 @@ export default function Dashboard() {
     );
   }
 
-  const categoryDataWithColors = (stats?.categoryData || []).map((cat, idx) => ({
-    ...cat,
-    color: CHART_COLORS[idx % CHART_COLORS.length]
-  }));
+  // Obtener la moneda más común de las transacciones, o usar MXN por defecto (optimizado)
+  const defaultCurrency = useMemo(() => {
+    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return 'MXN';
+    try {
+      const currencyCounts: Record<string, number> = {};
+      transactions.forEach(t => {
+        if (t && typeof t === 'object') {
+          const currency = t.currency || 'MXN';
+          currencyCounts[currency] = (currencyCounts[currency] || 0) + 1;
+        }
+      });
+      const mostCommon = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0];
+      return mostCommon ? mostCommon[0] : 'MXN';
+    } catch (error) {
+      console.error('Error calculando moneda por defecto:', error);
+      return 'MXN';
+    }
+  }, [transactions]);
 
-  // Obtener la moneda más común de las transacciones, o usar MXN por defecto
-  const getMostCommonCurrency = (): string => {
-    if (!transactions || transactions.length === 0) return 'MXN';
-    const currencyCounts: Record<string, number> = {};
-    transactions.forEach(t => {
-      const currency = t.currency || 'MXN';
-      currencyCounts[currency] = (currencyCounts[currency] || 0) + 1;
-    });
-    const mostCommon = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0];
-    return mostCommon ? mostCommon[0] : 'MXN';
-  };
-
-  const defaultCurrency = getMostCommonCurrency();
+  // Preparar datos de categorías con colores (optimizado)
+  const categoryDataWithColors = useMemo(() => {
+    if (!stats?.categoryData || !Array.isArray(stats.categoryData)) return [];
+    try {
+      return stats.categoryData.map((cat, idx) => ({
+        ...cat,
+        color: CHART_COLORS[idx % CHART_COLORS.length]
+      }));
+    } catch (error) {
+      console.error('Error preparando datos de categorías:', error);
+      return [];
+    }
+  }, [stats?.categoryData]);
 
   // Calcular datos del gráfico según el modo de vista (optimizado)
   const chartData = useMemo(() => {
@@ -419,7 +433,8 @@ export default function Dashboard() {
         let cumulativeIncome = 0;
         let cumulativeExpense = 0;
         
-        return stats.monthlyData.map((month, idx) => {
+        return stats.monthlyData.map((month) => {
+          if (!month || typeof month !== 'object') return null;
           cumulativeIncome += (month.income || 0);
           cumulativeExpense += (month.expense || 0);
           cumulativeBalance = cumulativeIncome - cumulativeExpense;
@@ -430,14 +445,37 @@ export default function Dashboard() {
             cumulativeIncome: parseFloat(cumulativeIncome.toFixed(2)),
             cumulativeExpense: parseFloat(cumulativeExpense.toFixed(2)),
           };
-        });
+        }).filter((item): item is NonNullable<typeof item> => item !== null);
       }
-      return stats.monthlyData;
+      return stats.monthlyData.filter((month) => month && typeof month === 'object');
     } catch (error) {
       console.error('Error calculando datos del gráfico:', error);
       return [];
     }
   }, [stats?.monthlyData, viewMode]);
+
+  // Memoizar el formatter del Tooltip para evitar re-renders
+  const tooltipFormatter = useMemo(() => {
+    return (value: any, name: string) => {
+      try {
+        if (viewMode === 'monthly') {
+          if (name === 'Balance Acumulado') {
+            return [formatCurrency(value, defaultCurrency), name];
+          }
+          if (name === 'Ingresos Acumulados') {
+            return [formatCurrency(value, defaultCurrency), name];
+          }
+          if (name === 'Gastos Acumulados') {
+            return [formatCurrency(value, defaultCurrency), name];
+          }
+        }
+        return [formatCurrency(value, defaultCurrency), name];
+      } catch (error) {
+        console.error('Error formateando tooltip:', error);
+        return [String(value || 0), name];
+      }
+    };
+  }, [viewMode, defaultCurrency]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -544,6 +582,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
+              {chartData.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <p>No hay datos para mostrar en el gráfico</p>
+                </div>
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
                   data={chartData} 
@@ -583,20 +626,7 @@ export default function Dashboard() {
                       border: '1px solid #e5e7eb',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
                     }}
-                    formatter={(value: any, name: string) => {
-                      if (viewMode === 'monthly') {
-                        if (name === 'Balance Acumulado') {
-                          return [formatCurrency(value, defaultCurrency), name];
-                        }
-                        if (name === 'Ingresos Acumulados') {
-                          return [formatCurrency(value, defaultCurrency), name];
-                        }
-                        if (name === 'Gastos Acumulados') {
-                          return [formatCurrency(value, defaultCurrency), name];
-                        }
-                      }
-                      return [formatCurrency(value, defaultCurrency), name];
-                    }}
+                    formatter={tooltipFormatter}
                   />
                   <Legend />
                   {viewMode === 'monthly' ? (
@@ -653,6 +683,7 @@ export default function Dashboard() {
                   )}
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -663,6 +694,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full relative">
+              {categoryDataWithColors.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <p>No hay datos de categorías para mostrar</p>
+                </div>
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -683,6 +719,7 @@ export default function Dashboard() {
                   <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
+              )}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Total Gastos</p>
