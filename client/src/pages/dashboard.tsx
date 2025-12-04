@@ -317,29 +317,39 @@ export default function Dashboard() {
   };
   const availableMonths = getAvailableMonths();
 
-  // Obtener semanas únicas
+  // Obtener semanas únicas (mejorado - incluye todas las semanas)
   const getAvailableWeeks = () => {
     if (transactionsLength === 0) return [];
     try {
-      const weekMap = new Map<string, string>();
+      const weekMap = new Map<string, { key: string; label: string; date: Date }>();
       transactionsArray.forEach(t => {
         try {
           if (!t?.date) return;
-          const date = new Date(t.date);
-          if (!isNaN(date.getTime())) {
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay());
-            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
-            if (!weekMap.has(weekKey)) {
-              const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-              weekMap.set(weekKey, weekLabel);
-            }
+          const date = new Date(t.date + 'T00:00:00'); // Asegurar zona horaria
+          if (isNaN(date.getTime())) return;
+          
+          // Calcular inicio de semana (domingo = 0)
+          const weekStart = new Date(date);
+          const dayOfWeek = date.getDay(); // 0 = Domingo, 6 = Sábado
+          weekStart.setDate(date.getDate() - dayOfWeek);
+          weekStart.setHours(0, 0, 0, 0);
+          
+          // Crear key única para la semana: YYYY-MM-DD (fecha del domingo)
+          const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+          
+          if (!weekMap.has(weekKey)) {
+            const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+            weekMap.set(weekKey, { key: weekKey, label: weekLabel, date: new Date(weekStart) });
           }
-        } catch {}
+        } catch {
+          // Ignorar errores
+        }
       });
-      return Array.from(weekMap.entries())
-        .map(([key, label]) => ({ key, label }))
-        .sort((a, b) => b.key.localeCompare(a.key));
+      
+      // Ordenar por fecha (más recientes primero)
+      return Array.from(weekMap.values())
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .map(({ key, label }) => ({ key, label }));
     } catch {
       return [];
     }
@@ -392,9 +402,15 @@ export default function Dashboard() {
           try {
             const date = new Date(t.date);
             if (isNaN(date.getTime())) return false;
+            
+            // Calcular inicio de semana (domingo)
             const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay());
-            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
+            const dayOfWeek = date.getDay();
+            weekStart.setDate(date.getDate() - dayOfWeek);
+            weekStart.setHours(0, 0, 0, 0);
+            
+            // Crear key igual que en getAvailableWeeks
+            const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
             return weekKey === deferredFilterWeek;
           } catch {
             return false;
@@ -434,6 +450,58 @@ export default function Dashboard() {
     }
   };
   const filteredTransactions = getFilteredTransactions();
+
+  // Calcular estadísticas dinámicas basadas en transacciones filtradas
+  const getFilteredStats = () => {
+    if (!filteredTransactions || filteredTransactions.length === 0) {
+      return {
+        totalBalance: 0,
+        monthlyIncome: 0,
+        monthlyExpenses: 0,
+        savingsRate: 0,
+      };
+    }
+
+    const income = filteredTransactions
+      .filter(t => t.type === 'income')
+      .reduce((acc, t) => {
+        const amount = parseFloat(String(t.amount || 0));
+        return acc + (isNaN(amount) ? 0 : amount);
+      }, 0);
+
+    const expenses = filteredTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((acc, t) => {
+        const amount = parseFloat(String(t.amount || 0));
+        return acc + (isNaN(amount) ? 0 : amount);
+      }, 0);
+
+    const totalBalance = income - expenses;
+    const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
+
+    return {
+      totalBalance: parseFloat(totalBalance.toFixed(2)),
+      monthlyIncome: parseFloat(income.toFixed(2)),
+      monthlyExpenses: parseFloat(expenses.toFixed(2)),
+      savingsRate: parseFloat(savingsRate.toFixed(1)),
+    };
+  };
+  
+  // Usar stats filtrados si hay filtros activos, sino usar stats globales
+  const hasActiveFilters = deferredFilterType !== 'all' || 
+                          deferredFilterCategory !== 'all' || 
+                          deferredFilterMonth !== 'all' || 
+                          deferredFilterWeek !== 'all' || 
+                          deferredFilterBank !== 'all' || 
+                          deferredSearchQuery.trim() !== '';
+  
+  const filteredStats = hasActiveFilters ? getFilteredStats() : null;
+  const displayStats = filteredStats || {
+    totalBalance: stats?.totalBalance || 0,
+    monthlyIncome: stats?.monthlyIncome || 0,
+    monthlyExpenses: stats?.monthlyExpenses || 0,
+    savingsRate: stats?.savingsRate || 0,
+  };
 
   // Preparar datos de categorías con colores
   const getCategoryDataWithColors = () => {
@@ -590,15 +658,17 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard 
           title="Balance Total" 
-          amount={stats?.totalBalance || 0} 
-          trend={stats?.balanceTrend !== undefined 
+          amount={displayStats.totalBalance} 
+          trend={hasActiveFilters ? '' : (stats?.balanceTrend !== undefined 
             ? `${stats.balanceTrend >= 0 ? '+' : ''}${stats.balanceTrend.toFixed(1)}%`
-            : 'N/A'
+            : 'N/A')
           }
-          trendUp={stats?.balanceTrend === undefined || stats.balanceTrend >= 0}
-          trendExplanation={stats?.balanceTrend !== undefined 
-            ? `Tu balance ${stats.balanceTrend >= 0 ? 'aumentó' : 'disminuyó'} un ${Math.abs(stats.balanceTrend).toFixed(1)}% comparado con el mes anterior. ${stats.balanceTrend >= 0 ? '¡Excelente progreso financiero!' : 'Revisa tus gastos para mejorar tu balance.'}`
-            : 'Tu balance total representa la diferencia entre todos tus ingresos y gastos registrados.'
+          trendUp={hasActiveFilters ? displayStats.totalBalance >= 0 : (stats?.balanceTrend === undefined || stats.balanceTrend >= 0)}
+          trendExplanation={hasActiveFilters 
+            ? `Balance basado en ${filteredTransactions.length} transacción(es) filtrada(s).`
+            : (stats?.balanceTrend !== undefined 
+              ? `Tu balance ${stats.balanceTrend >= 0 ? 'aumentó' : 'disminuyó'} un ${Math.abs(stats.balanceTrend).toFixed(1)}% comparado con el mes anterior. ${stats.balanceTrend >= 0 ? '¡Excelente progreso financiero!' : 'Revisa tus gastos para mejorar tu balance.'}`
+              : 'Tu balance total representa la diferencia entre todos tus ingresos y gastos registrados.')
           }
           icon={Wallet}
           color="text-primary"
@@ -608,10 +678,13 @@ export default function Dashboard() {
         />
         <SummaryCard 
           title="Ingresos" 
-          amount={stats?.monthlyIncome || 0} 
-          trend="+12%" 
+          amount={displayStats.monthlyIncome} 
+          trend={hasActiveFilters ? '' : '+12%'}
           trendUp={true}
-          trendExplanation="Los ingresos aumentaron un 12% comparado con el mes anterior. Esto indica un crecimiento positivo en tus entradas de dinero."
+          trendExplanation={hasActiveFilters
+            ? `Total de ingresos basado en las ${filteredTransactions.length} transacción(es) filtrada(s).`
+            : 'Los ingresos aumentaron un 12% comparado con el mes anterior. Esto indica un crecimiento positivo en tus entradas de dinero.'
+          }
           icon={ArrowUpRight}
           color="text-green-600"
           bgColor="bg-green-50"
@@ -620,10 +693,13 @@ export default function Dashboard() {
         />
         <SummaryCard 
           title="Gastos" 
-          amount={stats?.monthlyExpenses || 0} 
-          trend="-5%" 
+          amount={displayStats.monthlyExpenses} 
+          trend={hasActiveFilters ? '' : '-5%'}
           trendUp={false}
-          trendExplanation="Los gastos disminuyeron un 5% comparado con el mes anterior. Esto es positivo ya que estás gastando menos."
+          trendExplanation={hasActiveFilters
+            ? `Total de gastos basado en las ${filteredTransactions.length} transacción(es) filtrada(s).`
+            : 'Los gastos disminuyeron un 5% comparado con el mes anterior. Esto es positivo ya que estás gastando menos.'
+          }
           icon={ArrowDownRight}
           color="text-red-600"
           bgColor="bg-red-50"
@@ -632,11 +708,14 @@ export default function Dashboard() {
         />
         <SummaryCard 
           title="Tasa de Ahorro" 
-          amount={stats?.savingsRate || 0} 
+          amount={displayStats.savingsRate} 
           isPercent={true}
-          trend="+4.2%" 
-          trendUp={true}
-          trendExplanation={`Tu tasa de ahorro es del ${stats?.savingsRate || 0}%. Esto significa que ahorras ${stats?.savingsRate || 0}% de tus ingresos después de cubrir todos tus gastos.`}
+          trend={hasActiveFilters ? '' : '+4.2%'}
+          trendUp={displayStats.savingsRate >= 0}
+          trendExplanation={hasActiveFilters
+            ? `Tu tasa de ahorro basada en los filtros aplicados es del ${displayStats.savingsRate}%. Esto representa el porcentaje que ahorras de tus ingresos filtrados.`
+            : `Tu tasa de ahorro es del ${displayStats.savingsRate}%. Esto significa que ahorras ${displayStats.savingsRate}% de tus ingresos después de cubrir todos tus gastos.`
+          }
           icon={TrendingUp}
           color="text-purple-600"
           bgColor="bg-purple-50"
@@ -670,13 +749,18 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              {!chartData || chartData.length === 0 ? (
+              {loadingStats ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center space-y-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary mx-auto" />
+                    <p className="text-sm">Cargando datos del gráfico...</p>
+                  </div>
+                </div>
+              ) : !chartData || chartData.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center space-y-2">
                     <p className="text-sm">No hay datos para mostrar en el gráfico</p>
-                    {loadingStats && (
-                      <Loader2 className="h-4 w-4 animate-spin text-primary mx-auto" />
-                    )}
+                    <p className="text-xs text-muted-foreground">Agrega más transacciones para ver la evolución</p>
                   </div>
                 </div>
               ) : (
