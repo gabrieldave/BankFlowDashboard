@@ -228,6 +228,18 @@ export class PocketBaseStorage implements IStorage {
   private async _getAllTransactionsInternal(): Promise<Transaction[]> {
     await this.ensureAuth();
     
+    // Verificar estado de autenticación
+    const isAuthValid = this.isAuthenticated && this.pb.authStore.isValid;
+    console.log(`[getAllTransactions] Estado de autenticación: ${isAuthValid ? '✓ Autenticado' : '✗ No autenticado'}`);
+    
+    // Intentar obtener un conteo rápido de transacciones para diagnóstico
+    try {
+      const testResult = await this.pb.collection('transactions').getList(1, 1);
+      console.log(`[getAllTransactions] Test de conexión: ${testResult.totalItems || 0} transacciones totales según PocketBase`);
+    } catch (testError: any) {
+      console.warn(`[getAllTransactions] Error en test de conexión:`, testError.message);
+    }
+    
     // Helper para detectar errores de autocancelación
     const isAutoCancelledError = (error: any): boolean => {
       return error?.message?.includes('autocancelled') || 
@@ -240,19 +252,29 @@ export class PocketBaseStorage implements IStorage {
     // Try different sort options, falling back if one fails
     let records: any[] = [];
     let lastError: any = null;
+    let strategySuccess = false;
     
     // Intentar con diferentes estrategias, con delays para evitar autocancelación
     const strategies = [
-      { name: '-created', fn: () => this.pb.collection('transactions').getFullList({ sort: '-created' }) },
       { name: '-id', fn: () => this.pb.collection('transactions').getFullList({ sort: '-id' }) },
+      { name: 'id', fn: () => this.pb.collection('transactions').getFullList({ sort: 'id' }) },
       { name: 'no sort', fn: () => this.pb.collection('transactions').getFullList() },
+      { name: '-created', fn: () => this.pb.collection('transactions').getFullList({ sort: '-created' }) },
     ];
 
     for (const strategy of strategies) {
       try {
         await wait(100); // Pequeño delay para evitar autocancelación
         records = await strategy.fn();
-        break; // Éxito, salir del loop
+        if (records && records.length > 0) {
+          console.log(`✓ Estrategia "${strategy.name}" exitosa: ${records.length} registros obtenidos`);
+          strategySuccess = true;
+          break; // Éxito, salir del loop
+        } else if (records && records.length === 0) {
+          console.log(`⚠ Estrategia "${strategy.name}" devolvió 0 registros, intentando siguiente...`);
+          // Continuar con la siguiente estrategia si devuelve 0 registros
+          continue;
+        }
       } catch (error: any) {
         lastError = error;
         if (isAutoCancelledError(error)) {
@@ -265,23 +287,34 @@ export class PocketBaseStorage implements IStorage {
       }
     }
 
-    // Si todas las estrategias fallaron, intentar con paginación
-    if (records.length === 0 && lastError) {
-      console.warn("Todas las estrategias fallaron, intentando paginación...");
+    // Si todas las estrategias fallaron o devolvieron 0 registros, intentar con paginación
+    if (!strategySuccess || records.length === 0) {
+      console.log("Intentando obtener transacciones con paginación...");
       records = [];
       let page = 1;
       let hasMore = true;
       let consecutiveErrors = 0;
       const maxConsecutiveErrors = 3;
+      let totalFetched = 0;
 
       while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
         try {
           await wait(150); // Delay entre páginas
-          const result = await this.pb.collection('transactions').getList(page, 500);
-          records.push(...(result.items || []));
-          hasMore = result.items && result.items.length === 500;
-          page++;
-          consecutiveErrors = 0; // Reset contador de errores
+          const result = await this.pb.collection('transactions').getList(page, 500, {
+            sort: '-id', // Intentar con ordenamiento por id
+          });
+          
+          if (result.items && result.items.length > 0) {
+            records.push(...result.items);
+            totalFetched += result.items.length;
+            console.log(`✓ Página ${page}: ${result.items.length} registros obtenidos (total: ${totalFetched})`);
+            hasMore = result.items.length === 500;
+            page++;
+            consecutiveErrors = 0; // Reset contador de errores
+          } else {
+            console.log(`Página ${page}: 0 registros, finalizando paginación`);
+            hasMore = false;
+          }
         } catch (pageError: any) {
           consecutiveErrors++;
           if (isAutoCancelledError(pageError)) {
@@ -296,6 +329,12 @@ export class PocketBaseStorage implements IStorage {
           }
           await wait(200);
         }
+      }
+      
+      if (records.length > 0) {
+        console.log(`✓ Paginación exitosa: ${records.length} registros obtenidos en total`);
+      } else {
+        console.warn(`⚠ No se pudieron obtener transacciones. Último error: ${lastError?.message || 'N/A'}`);
       }
     }
     
