@@ -338,6 +338,12 @@ export class PocketBaseStorage implements IStorage {
       }
     }
     
+    // Log para diagnóstico
+    console.log(`[getAllTransactions] Registros obtenidos antes de procesar: ${records.length}`);
+    if (records.length > 0) {
+      console.log(`[getAllTransactions] Ejemplo de primer registro:`, JSON.stringify(records[0], null, 2));
+    }
+    
     // Sort records by date in memory if we couldn't sort on the server
     // Only sort if we have records and they don't have a created field (meaning server-side sort failed)
     if (records.length > 0) {
@@ -351,22 +357,40 @@ export class PocketBaseStorage implements IStorage {
       }
     }
     
-    return records
-      .filter((item: any) => {
-        // Filtrar registros inválidos que no tengan campos requeridos
-        return item && (item.date || item.description || item.amount !== undefined);
-      })
-      .map((item: any, index: number) => ({
-        id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
-        date: String(item.date || '').trim() || new Date().toISOString().split('T')[0],
-        description: String(item.description || '').trim() || 'Sin descripción',
-        amount: item.amount !== undefined && item.amount !== null ? String(item.amount) : '0',
-        type: String(item.type || 'expense').trim(),
-        category: String(item.category || 'Sin categoría').trim(),
-        merchant: String(item.merchant || '').trim(),
-        currency: String(item.currency || 'MXN').trim().toUpperCase(),
-        createdAt: item.created ? new Date(item.created) : new Date(),
-      }));
+    // Filtrar y mapear registros
+    const filtered = records.filter((item: any) => {
+      // Filtrar registros inválidos - ser más permisivo
+      if (!item || typeof item !== 'object') {
+        return false;
+      }
+      // Aceptar si tiene al menos uno de estos campos
+      const hasDate = item.date !== undefined && item.date !== null && String(item.date).trim() !== '';
+      const hasDescription = item.description !== undefined && item.description !== null && String(item.description).trim() !== '';
+      const hasAmount = item.amount !== undefined && item.amount !== null;
+      
+      return hasDate || hasDescription || hasAmount;
+    });
+    
+    console.log(`[getAllTransactions] Registros después del filtro: ${filtered.length}`);
+    
+    const mapped = filtered.map((item: any, index: number) => ({
+      id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
+      date: String(item.date || '').trim() || new Date().toISOString().split('T')[0],
+      description: String(item.description || '').trim() || 'Sin descripción',
+      amount: item.amount !== undefined && item.amount !== null ? String(item.amount) : '0',
+      type: String(item.type || 'expense').trim(),
+      category: String(item.category || 'Sin categoría').trim(),
+      merchant: String(item.merchant || '').trim(),
+      currency: String(item.currency || 'MXN').trim().toUpperCase(),
+      createdAt: item.created ? new Date(item.created) : new Date(),
+    }));
+    
+    console.log(`[getAllTransactions] Registros finales mapeados: ${mapped.length}`);
+    if (mapped.length > 0) {
+      console.log(`[getAllTransactions] Ejemplo de primer registro mapeado:`, JSON.stringify(mapped[0], null, 2));
+    }
+    
+    return mapped;
   }
 
   private hashStringToNumber(str: string): number {
