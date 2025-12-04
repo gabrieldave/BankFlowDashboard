@@ -98,14 +98,20 @@ export default function Dashboard() {
   const deferredFilterWeek = useDeferredValue(filterWeek);
   const deferredFilterBank = useDeferredValue(filterBank);
 
-  // Usar length como dependencia estable para evitar re-renders innecesarios
-  // Solo recalcular cuando cambie el número de transacciones, no la referencia del array
-  const transactionsLength = transactions?.length ?? 0;
-  const transactionsArray = transactions && Array.isArray(transactions) ? transactions : [];
+  // Validar transacciones primero
+  const hasValidTransactions = Array.isArray(transactions) && transactions.length > 0;
+  
+  // Normalizar y estabilizar el array de transacciones - solo calcular si hay datos
+  const transactionsArray = useMemo(() => {
+    if (!hasValidTransactions) return [];
+    return transactions || [];
+  }, [hasValidTransactions, transactions]);
 
-  // Obtener categorías únicas para el filtro (optimizado)
+  const transactionsLength = transactionsArray.length;
+
+  // Obtener categorías únicas para el filtro - solo si hay datos válidos
   const availableCategories = useMemo(() => {
-    if (transactionsLength === 0 || !transactionsArray.length) return [];
+    if (!hasValidTransactions || transactionsLength === 0) return [];
     try {
       const categories = new Set<string>();
       transactionsArray.forEach(t => {
@@ -118,11 +124,11 @@ export default function Dashboard() {
       console.error('Error calculando categorías:', error);
       return [];
     }
-  }, [transactionsLength, transactionsArray]);
+  }, [hasValidTransactions, transactionsLength, transactionsArray]);
 
   // Obtener meses únicos disponibles en las transacciones (optimizado)
   const availableMonths = useMemo(() => {
-    if (transactionsLength === 0 || !transactionsArray.length) return [];
+    if (transactionsLength === 0) return [];
     try {
       const monthMap = new Map<string, string>();
       transactionsArray.forEach(t => {
@@ -151,7 +157,7 @@ export default function Dashboard() {
 
   // Obtener semanas disponibles (optimizado)
   const availableWeeks = useMemo(() => {
-    if (transactionsLength === 0 || !transactionsArray.length) return [];
+    if (transactionsLength === 0) return [];
     try {
       const weekMap = new Map<string, string>();
       transactionsArray.forEach(t => {
@@ -182,7 +188,7 @@ export default function Dashboard() {
 
   // Obtener bancos únicos disponibles (optimizado)
   const availableBanks = useMemo(() => {
-    if (transactionsLength === 0 || !transactionsArray.length) return [];
+    if (transactionsLength === 0) return [];
     try {
       const bankSet = new Set<string>();
       transactionsArray.forEach(t => {
@@ -199,7 +205,7 @@ export default function Dashboard() {
 
   // Filtrar y ordenar transacciones (optimizado con manejo de errores y deferred values)
   const filteredTransactions = useMemo(() => {
-    if (transactionsLength === 0 || !transactionsArray.length) return [];
+    if (transactionsLength === 0) return [];
     
     try {
       let filtered = [...transactionsArray];
@@ -437,7 +443,7 @@ export default function Dashboard() {
 
   // Obtener la moneda más común de las transacciones, o usar MXN por defecto (optimizado)
   const defaultCurrency = useMemo(() => {
-    if (transactionsLength === 0 || !transactionsArray.length) return 'MXN';
+    if (transactionsLength === 0) return 'MXN';
     try {
       const currencyCounts: Record<string, number> = {};
       transactionsArray.forEach(t => {
