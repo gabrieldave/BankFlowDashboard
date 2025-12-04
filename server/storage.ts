@@ -296,27 +296,45 @@ export class PocketBaseStorage implements IStorage {
                   result.items.map(async (item: any, idx: number) => {
                     try {
                       // Intentar obtener con campos específicos usando la API REST directamente
-                      const apiUrl = process.env.POCKETBASE_URL?.replace(/\/_\/$/, '') || process.env.POCKETBASE_URL || '';
+                      let apiUrl = process.env.POCKETBASE_URL?.trim() || '';
+                      // Asegurar que la URL no tenga /_/ para la API REST
+                      if (apiUrl.endsWith('/_/')) {
+                        apiUrl = apiUrl.slice(0, -3);
+                      }
+                      if (!apiUrl.endsWith('/')) {
+                        apiUrl += '/';
+                      }
                       const token = this.pb.authStore.token;
                       
                       if (apiUrl && token) {
-                        const response = await fetch(`${apiUrl}/api/collections/transactions/records/${item.id}`, {
-                          headers: {
-                            'Authorization': `Bearer ${token}`,
-                          },
-                        });
-                        
-                        if (response.ok) {
-                          const fullRecord = await response.json();
-                          if (idx === 0) {
-                            console.log(`[getAllTransactions] Primer registro expandido (API REST):`, JSON.stringify(fullRecord));
+                        try {
+                          const response = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}?fields=id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`,
+                            },
+                          });
+                          
+                          if (response.ok) {
+                            const fullRecord = await response.json();
+                            if (idx === 0) {
+                              console.log(`[getAllTransactions] Primer registro expandido (API REST):`, JSON.stringify(fullRecord));
+                            }
+                            // Verificar que tiene campos de datos
+                            if (fullRecord.date || fullRecord.description || fullRecord.amount !== undefined) {
+                              return fullRecord;
+                            } else {
+                              console.warn(`[getAllTransactions] API REST también devolvió solo metadata para ${item.id}`);
+                            }
                           }
-                          return fullRecord;
+                        } catch (fetchError: any) {
+                          console.warn(`[getAllTransactions] Error en fetch API REST:`, fetchError.message);
                         }
                       }
                       
-                      // Fallback al método SDK
-                      const fullRecord = await this.pb.collection('transactions').getOne(item.id);
+                      // Fallback al método SDK con fields explícitos
+                      const fullRecord = await this.pb.collection('transactions').getOne(item.id, {
+                        fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
+                      });
                       if (idx === 0) {
                         console.log(`[getAllTransactions] Primer registro expandido (SDK):`, JSON.stringify(fullRecord));
                       }
