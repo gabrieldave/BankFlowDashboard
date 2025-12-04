@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useDeferredValue } from "react";
+import { useState, useDeferredValue } from "react";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -433,29 +433,28 @@ export default function Dashboard() {
   };
   const filteredTransactions = getFilteredTransactions();
 
-  // Preparar datos de categorías con colores (optimizado)
-  const categoryDataWithColors = useMemo(() => {
+  // Preparar datos de categorías con colores
+  const getCategoryDataWithColors = () => {
     if (!stats?.categoryData || !Array.isArray(stats.categoryData)) return [];
     try {
       return stats.categoryData.map((cat, idx) => ({
         ...cat,
         color: CHART_COLORS[idx % CHART_COLORS.length]
       }));
-    } catch (error) {
-      console.error('Error preparando datos de categorías:', error);
+    } catch {
       return [];
     }
-  }, [stats?.categoryData]);
+  };
+  const categoryDataWithColors = getCategoryDataWithColors();
 
-  // Calcular datos del gráfico según el modo de vista (optimizado)
-  const chartData = useMemo(() => {
+  // Calcular datos del gráfico según el modo de vista
+  const getChartData = () => {
     if (!stats?.monthlyData || !Array.isArray(stats.monthlyData) || stats.monthlyData.length === 0) {
       return [];
     }
     
     try {
       if (viewMode === 'monthly') {
-        // Calcular acumulación mes a mes (optimizado)
         let cumulativeBalance = 0;
         let cumulativeIncome = 0;
         let cumulativeExpense = 0;
@@ -475,34 +474,31 @@ export default function Dashboard() {
         }).filter((item): item is NonNullable<typeof item> => item !== null);
       }
       return stats.monthlyData.filter((month) => month && typeof month === 'object');
-    } catch (error) {
-      console.error('Error calculando datos del gráfico:', error);
+    } catch {
       return [];
     }
-  }, [stats?.monthlyData, viewMode]);
+  };
+  const chartData = getChartData();
 
-  // Memoizar el formatter del Tooltip para evitar re-renders
-  const tooltipFormatter = useMemo(() => {
-    return (value: any, name: string) => {
-      try {
-        if (viewMode === 'monthly') {
-          if (name === 'Balance Acumulado') {
-            return [formatCurrency(value, defaultCurrency), name];
-          }
-          if (name === 'Ingresos Acumulados') {
-            return [formatCurrency(value, defaultCurrency), name];
-          }
-          if (name === 'Gastos Acumulados') {
-            return [formatCurrency(value, defaultCurrency), name];
-          }
+  // Formatter del Tooltip
+  const tooltipFormatter = (value: any, name: string) => {
+    try {
+      if (viewMode === 'monthly') {
+        if (name === 'Balance Acumulado') {
+          return [formatCurrency(value, defaultCurrency), name];
         }
-        return [formatCurrency(value, defaultCurrency), name];
-      } catch (error) {
-        console.error('Error formateando tooltip:', error);
-        return [String(value || 0), name];
+        if (name === 'Ingresos Acumulados') {
+          return [formatCurrency(value, defaultCurrency), name];
+        }
+        if (name === 'Gastos Acumulados') {
+          return [formatCurrency(value, defaultCurrency), name];
+        }
       }
-    };
-  }, [viewMode, defaultCurrency]);
+      return [formatCurrency(value, defaultCurrency), name];
+    } catch {
+      return [String(value || 0), name];
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
