@@ -312,17 +312,22 @@ export class PocketBaseStorage implements IStorage {
       }
     }
     
-    return records.map((item: any, index: number) => ({
-      id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
-      date: item.date,
-      description: item.description,
-      amount: item.amount,
-      type: item.type,
-      category: item.category,
-      merchant: item.merchant,
-      currency: item.currency || "MXN",
-      createdAt: item.created ? new Date(item.created) : new Date(),
-    }));
+    return records
+      .filter((item: any) => {
+        // Filtrar registros inválidos que no tengan campos requeridos
+        return item && (item.date || item.description || item.amount !== undefined);
+      })
+      .map((item: any, index: number) => ({
+        id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
+        date: String(item.date || '').trim() || new Date().toISOString().split('T')[0],
+        description: String(item.description || '').trim() || 'Sin descripción',
+        amount: item.amount !== undefined && item.amount !== null ? String(item.amount) : '0',
+        type: String(item.type || 'expense').trim(),
+        category: String(item.category || 'Sin categoría').trim(),
+        merchant: String(item.merchant || '').trim(),
+        currency: String(item.currency || 'MXN').trim().toUpperCase(),
+        createdAt: item.created ? new Date(item.created) : new Date(),
+      }));
   }
 
   private hashStringToNumber(str: string): number {
@@ -411,12 +416,17 @@ export class PocketBaseStorage implements IStorage {
 
     // Función para normalizar y comparar transacciones
     const normalizeTransaction = (t: InsertTransaction | Transaction) => {
-      const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+      // Validar y sanitizar valores
+      const date = (t.date ? String(t.date).trim() : '').toLowerCase();
+      const description = (t.description ? String(t.description).trim() : '').toLowerCase().substring(0, 100);
+      const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : (t.amount || 0);
+      const type = String(t.type || 'expense').trim();
+      
       return {
-        date: t.date.trim().toLowerCase(),
-        description: t.description.trim().toLowerCase().substring(0, 100), // Limitar longitud
-        amount: Math.abs(amount).toFixed(2), // Normalizar monto (sin signo, 2 decimales)
-        type: t.type,
+        date: date || new Date().toISOString().split('T')[0],
+        description: description || 'sin descripción',
+        amount: Math.abs(amount || 0).toFixed(2), // Normalizar monto (sin signo, 2 decimales)
+        type: type || 'expense',
       };
     };
 

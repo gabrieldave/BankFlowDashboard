@@ -322,16 +322,21 @@ export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransact
         return null;
       }
       
+      // Validar y sanitizar campos antes de usar
+      const date = String(t.date || new Date().toISOString().split('T')[0]).trim();
+      const description = String(t.description || 'Sin descripción').trim();
+      const type = String(t.type || 'expense').trim();
+      
       // Log para debugging
-      console.log(`Transacción procesada: ${t.date} | ${t.type} | ${t.description.substring(0, 50)} | $${amount}`);
+      console.log(`Transacción procesada: ${date} | ${type} | ${description.substring(0, 50)} | $${amount}`);
       
       return {
-        date: t.date,
-        description: t.description.substring(0, 500),
+        date: date,
+        description: description.substring(0, 500),
         amount: amount.toString(),
-        type: t.type,
+        type: type === 'income' ? 'income' : 'expense',
         category: 'General', // Se clasificará después con IA
-        merchant: t.description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
+        merchant: description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
         currency: detectedCurrency,
       };
     }).filter((t): t is InsertTransaction => t !== null);

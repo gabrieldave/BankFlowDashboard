@@ -78,21 +78,36 @@ export async function registerRoutes(
       
       // Función para normalizar y comparar transacciones (igual que en storage.ts)
       const normalizeTransaction = (t: any) => {
-        const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+        // Validar y sanitizar valores para evitar errores con undefined/null
+        const date = (t?.date ? String(t.date).trim() : '').toLowerCase();
+        const description = (t?.description ? String(t.description).trim() : '').toLowerCase().substring(0, 100);
+        const amount = typeof t?.amount === 'string' ? parseFloat(t.amount) : (t?.amount || 0);
+        const type = String(t?.type || 'expense').trim();
+        
         return {
-          date: t.date.trim().toLowerCase(),
-          description: t.description.trim().toLowerCase().substring(0, 100),
-          amount: Math.abs(amount).toFixed(2),
-          type: t.type,
+          date: date || new Date().toISOString().split('T')[0],
+          description: description || 'sin descripción',
+          amount: Math.abs(amount || 0).toFixed(2),
+          type: type || 'expense',
         };
       };
 
       // Crear un Set de transacciones existentes normalizadas
+      // Filtrar transacciones inválidas antes de normalizar
+      const validExistingTransactions = existingTransactions.filter(t => 
+        t && (t.date || t.description || t.amount !== undefined)
+      );
+      
       const existingSet = new Set(
-        existingTransactions.map(t => {
-          const normalized = normalizeTransaction(t);
-          return `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
-        })
+        validExistingTransactions.map(t => {
+          try {
+            const normalized = normalizeTransaction(t);
+            return `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+          } catch (error) {
+            console.warn("Error normalizando transacción existente:", error, t);
+            return null;
+          }
+        }).filter((key): key is string => key !== null)
       );
 
       // Contar cuántas transacciones del archivo ya existen
@@ -157,13 +172,24 @@ export async function registerRoutes(
     try {
       const transactions = await storage.getAllTransactions();
       
-      const income = transactions
-        .filter(t => t.type === 'income')
-        .reduce((acc, t) => acc + parseFloat(t.amount), 0);
+      // Filtrar transacciones válidas antes de procesar
+      const validTransactions = transactions.filter(t => 
+        t && t.amount !== undefined && t.amount !== null && !isNaN(parseFloat(String(t.amount)))
+      );
       
-      const expenses = transactions
+      const income = validTransactions
+        .filter(t => t.type === 'income')
+        .reduce((acc, t) => {
+          const amount = parseFloat(String(t.amount || 0));
+          return acc + (isNaN(amount) ? 0 : amount);
+        }, 0);
+      
+      const expenses = validTransactions
         .filter(t => t.type === 'expense')
-        .reduce((acc, t) => acc + parseFloat(t.amount), 0);
+        .reduce((acc, t) => {
+          const amount = parseFloat(String(t.amount || 0));
+          return acc + (isNaN(amount) ? 0 : amount);
+        }, 0);
 
       const totalBalance = income - expenses;
       const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
@@ -172,11 +198,15 @@ export async function registerRoutes(
       const categoryTotals: Record<string, number> = {};
       const categoryCounts: Record<string, number> = {};
       
-      transactions
+      validTransactions
         .filter(t => t.type === 'expense')
         .forEach(t => {
-          categoryTotals[t.category] = (categoryTotals[t.category] || 0) + parseFloat(t.amount);
-          categoryCounts[t.category] = (categoryCounts[t.category] || 0) + 1;
+          const category = String(t.category || 'General').trim();
+          const amount = parseFloat(String(t.amount || 0));
+          if (!isNaN(amount)) {
+            categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+            categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+          }
         });
 
       const categoryData = Object.entries(categoryTotals)
@@ -190,10 +220,14 @@ export async function registerRoutes(
 
       // Análisis por comercio (top merchants)
       const merchantTotals: Record<string, number> = {};
-      transactions
+      validTransactions
         .filter(t => t.type === 'expense')
         .forEach(t => {
-          merchantTotals[t.merchant] = (merchantTotals[t.merchant] || 0) + parseFloat(t.amount);
+          const merchant = String(t.merchant || 'Desconocido').trim();
+          const amount = parseFloat(String(t.amount || 0));
+          if (!isNaN(amount)) {
+            merchantTotals[merchant] = (merchantTotals[merchant] || 0) + amount;
+          }
         });
 
       const topMerchants = Object.entries(merchantTotals)
@@ -202,7 +236,7 @@ export async function registerRoutes(
         .slice(0, 10);
 
       // Análisis mensual
-      const monthlyData = calculateMonthlyData(transactions);
+      const monthlyData = calculateMonthlyData(validTransactions);
 
       // Calcular tendencia del balance (mes actual vs mes anterior)
       let balanceTrend = 0;
@@ -235,11 +269,11 @@ export async function registerRoutes(
         : 0;
 
       // Análisis diario (últimos 30 días)
-      const dailyData = calculateDailyData(transactions);
+      const dailyData = calculateDailyData(validTransactions);
 
       // Calcular métricas adicionales útiles
-      const expenseTransactions = transactions.filter(t => t.type === 'expense');
-      const incomeTransactions = transactions.filter(t => t.type === 'income');
+      const expenseTransactions = validTransactions.filter(t => t.type === 'expense');
+      const incomeTransactions = validTransactions.filter(t => t.type === 'income');
       
       // Gasto promedio diario (todos los días con datos)
       const totalDays = dailyData.length;
@@ -256,10 +290,17 @@ export async function registerRoutes(
       const dayOfWeekTotals: Record<string, number> = {};
       expenseTransactions.forEach(t => {
         try {
+          if (!t.date) return;
           const date = new Date(t.date);
+          if (isNaN(date.getTime())) return;
           const dayName = date.toLocaleDateString('es-ES', { weekday: 'long' });
-          dayOfWeekTotals[dayName] = (dayOfWeekTotals[dayName] || 0) + parseFloat(t.amount);
-        } catch (e) {}
+          const amount = parseFloat(String(t.amount || 0));
+          if (!isNaN(amount)) {
+            dayOfWeekTotals[dayName] = (dayOfWeekTotals[dayName] || 0) + amount;
+          }
+        } catch (e) {
+          // Ignorar errores de fecha inválida
+        }
       });
       const mostSpentDay = Object.entries(dayOfWeekTotals)
         .sort((a, b) => b[1] - a[1])[0];
@@ -269,36 +310,45 @@ export async function registerRoutes(
       
       // Transacciones más frecuentes (por merchant)
       const merchantCounts: Record<string, number> = {};
-      transactions.forEach(t => {
-        merchantCounts[t.merchant] = (merchantCounts[t.merchant] || 0) + 1;
+      validTransactions.forEach(t => {
+        const merchant = String(t.merchant || 'Desconocido').trim();
+        merchantCounts[merchant] = (merchantCounts[merchant] || 0) + 1;
       });
       const mostFrequentMerchant = Object.entries(merchantCounts)
         .sort((a, b) => b[1] - a[1])[0];
 
       // Transacciones más grandes
-      const largestExpenses = transactions
+      const largestExpenses = validTransactions
         .filter(t => t.type === 'expense')
-        .map(t => ({
-          id: t.id,
-          description: t.description,
-          merchant: t.merchant,
-          category: t.category,
-          amount: parseFloat(t.amount),
-          date: t.date,
-        }))
+        .map(t => {
+          const amount = parseFloat(String(t.amount || 0));
+          return {
+            id: t.id,
+            description: String(t.description || 'Sin descripción').trim(),
+            merchant: String(t.merchant || '').trim(),
+            category: String(t.category || 'General').trim(),
+            amount: isNaN(amount) ? 0 : amount,
+            date: String(t.date || '').trim(),
+          };
+        })
+        .filter(t => !isNaN(t.amount) && t.amount > 0)
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
 
-      const largestIncomes = transactions
+      const largestIncomes = validTransactions
         .filter(t => t.type === 'income')
-        .map(t => ({
-          id: t.id,
-          description: t.description,
-          merchant: t.merchant,
-          category: t.category,
-          amount: parseFloat(t.amount),
-          date: t.date,
-        }))
+        .map(t => {
+          const amount = parseFloat(String(t.amount || 0));
+          return {
+            id: t.id,
+            description: String(t.description || 'Sin descripción').trim(),
+            merchant: String(t.merchant || '').trim(),
+            category: String(t.category || 'General').trim(),
+            amount: isNaN(amount) ? 0 : amount,
+            date: String(t.date || '').trim(),
+          };
+        })
+        .filter(t => !isNaN(t.amount) && t.amount > 0)
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
 
@@ -315,7 +365,7 @@ export async function registerRoutes(
         balanceTrend: parseFloat(balanceTrend.toFixed(1)),
         largestExpenses,
         largestIncomes,
-        totalTransactions: transactions.length,
+        totalTransactions: validTransactions.length,
         avgTransactionAmount: expenseTransactions.length > 0 
           ? parseFloat((expenses / expenseTransactions.length).toFixed(2))
           : 0,
