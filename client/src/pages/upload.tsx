@@ -194,7 +194,6 @@ export default function UploadPage() {
       // Procesamiento completado exitosamente
       cleanup();
       setUploadProgress(100);
-      setStatusMessage("¡Procesamiento completado!");
       
       // Limpiar estado de localStorage
       localStorage.removeItem('uploadInProgress');
@@ -202,17 +201,33 @@ export default function UploadPage() {
       localStorage.removeItem('uploadProgress');
       uploadStartTimeRef.current = null;
 
-      setTimeout(() => {
-        let description = result.message;
-        if (result.duplicates && result.duplicates > 0) {
-          description += ` (${result.duplicates} duplicadas omitidas)`;
-        }
+      // Verificar si el archivo ya fue procesado
+      if (result.alreadyProcessed) {
+        setStatusMessage("Archivo ya procesado");
         toast({
-          title: "¡Archivo procesado!",
-          description,
+          title: "Archivo ya procesado",
+          description: result.message || "Este archivo ya fue procesado anteriormente. No se agregaron transacciones duplicadas.",
+          variant: "default",
         });
-        setLocation("/dashboard");
-      }, 1000);
+        
+        // Esperar un momento antes de redirigir
+        setTimeout(() => {
+          setLocation("/dashboard");
+        }, 2000);
+      } else {
+        setStatusMessage("¡Procesamiento completado!");
+        setTimeout(() => {
+          let description = result.message;
+          if (result.duplicates && result.duplicates > 0) {
+            description += ` (${result.duplicates} duplicadas omitidas)`;
+          }
+          toast({
+            title: "¡Archivo procesado!",
+            description,
+          });
+          setLocation("/dashboard");
+        }, 1000);
+      }
     } catch (error: any) {
       cleanup();
       

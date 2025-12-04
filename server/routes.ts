@@ -67,6 +67,50 @@ export async function registerRoutes(
         });
       }
 
+      // Verificar si todas las transacciones ya fueron procesadas (duplicadas)
+      const existingTransactions = await storage.getAllTransactions();
+      
+      // Función para normalizar y comparar transacciones (igual que en storage.ts)
+      const normalizeTransaction = (t: any) => {
+        const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+        return {
+          date: t.date.trim().toLowerCase(),
+          description: t.description.trim().toLowerCase().substring(0, 100),
+          amount: Math.abs(amount).toFixed(2),
+          type: t.type,
+        };
+      };
+
+      // Crear un Set de transacciones existentes normalizadas
+      const existingSet = new Set(
+        existingTransactions.map(t => {
+          const normalized = normalizeTransaction(t);
+          return `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+        })
+      );
+
+      // Contar cuántas transacciones del archivo ya existen
+      let duplicateCount = 0;
+      for (const transaction of validTransactions) {
+        const normalized = normalizeTransaction(transaction);
+        const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+        if (existingSet.has(key)) {
+          duplicateCount++;
+        }
+      }
+
+      // Si todas las transacciones ya fueron procesadas, retornar mensaje especial
+      if (duplicateCount === validTransactions.length) {
+        return res.json({
+          message: `Este archivo ya fue procesado anteriormente. Todas las ${validTransactions.length} transacciones ya existen en el sistema.`,
+          count: 0,
+          duplicates: duplicateCount,
+          skipped: 0,
+          transactions: [],
+          alreadyProcessed: true, // Flag para indicar que ya fue procesado
+        });
+      }
+
       // Detectar y filtrar duplicados antes de guardar
       const result = await storage.createTransactions(validTransactions);
 
@@ -81,6 +125,7 @@ export async function registerRoutes(
         duplicates: result.duplicates,
         skipped: result.skipped,
         transactions: result.saved,
+        alreadyProcessed: false,
       });
     } catch (error: any) {
       console.error("Error procesando archivo:", error);
