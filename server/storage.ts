@@ -1,5 +1,6 @@
 import { type User, type InsertUser, type Transaction, type InsertTransaction } from "@shared/schema";
 import { randomUUID } from "crypto";
+import PocketBase from "pocketbase";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -98,23 +99,29 @@ export class MemStorage implements IStorage {
 }
 
 export class PocketBaseStorage implements IStorage {
-  private baseUrl: string;
-  private adminToken: string | null = null;
+  private pb: PocketBase;
+  private isAuthenticated: boolean = false;
 
   constructor() {
-    this.baseUrl = process.env.POCKETBASE_URL || "";
-    if (!this.baseUrl) {
+    const baseUrl = process.env.POCKETBASE_URL || "";
+    if (!baseUrl) {
       throw new Error("POCKETBASE_URL no está configurada");
     }
-    // Usar la URL exactamente como está configurada - NO remover nada
-    // Solo remover trailing slash si existe (excepto si termina en /_/)
-    if (this.baseUrl.endsWith("/") && !this.baseUrl.endsWith("/_/")) {
-      this.baseUrl = this.baseUrl.slice(0, -1);
+
+    // Asegurar que la URL no tenga /_/ al final para el SDK
+    let apiUrl = baseUrl.trim();
+    if (apiUrl.endsWith("/_/")) {
+      apiUrl = apiUrl.slice(0, -3); // Remover "/_/"
     }
+    if (!apiUrl.endsWith("/")) {
+      apiUrl += "/";
+    }
+
+    this.pb = new PocketBase(apiUrl);
   }
 
   private async authenticateAdmin(): Promise<void> {
-    if (this.adminToken) return;
+    if (this.isAuthenticated && this.pb.authStore.isValid) return;
 
     const adminEmail = process.env.POCKETBASE_ADMIN_EMAIL;
     const adminPassword = process.env.POCKETBASE_ADMIN_PASSWORD;
@@ -130,157 +137,36 @@ export class PocketBaseStorage implements IStorage {
         process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       }
 
-      // Ajustar URL para la API (remover /_/ si existe, la API está en la raíz)
-      let apiUrl = this.baseUrl;
-      if (apiUrl.endsWith("/_/")) {
-        apiUrl = apiUrl.replace("/_/", "/");
-      }
-
-      // El endpoint correcto de PocketBase para autenticación de admin
-      const endpoint = "/api/admins/auth-with-password";
-      const authUrl = `${apiUrl}${endpoint}`;
-
-      console.log(`Intentando autenticación en: ${authUrl} (email: ${adminEmail})`);
-
-      const response = await fetch(authUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          identity: adminEmail,
-          password: adminPassword,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        this.adminToken = data.token;
-        console.log("✓ Autenticación exitosa como admin de PocketBase");
-        return;
-      } else {
-        const errorText = await response.text();
-        let errorMessage = `Error ${response.status}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.message || errorJson.error || errorMessage;
-        } catch {
-          errorMessage = errorText.substring(0, 200) || errorMessage;
-        }
-        console.error(`❌ Error de autenticación (${response.status}): ${errorMessage}`);
-        console.error(`URL usada: ${authUrl}`);
-        console.error(`Verifica que las credenciales sean correctas y que el admin exista en PocketBase.`);
-        // No establecer adminToken, las siguientes operaciones fallarán pero mostrarán el error
-        return;
-      }
+      // Usar _superusers para PocketBase v0.23+
+      await this.pb.collection('_superusers').authWithPassword(adminEmail, adminPassword);
+      this.isAuthenticated = true;
+      console.log("✓ Autenticación exitosa como admin de PocketBase");
     } catch (error: any) {
-      console.error("❌ Error al intentar autenticarse como admin:", error.message);
-      console.error("Stack:", error.stack);
-      // No establecer adminToken
+      console.error(`❌ Error de autenticación: ${error.message}`);
+      console.error(`Verifica que las credenciales sean correctas y que el admin exista en PocketBase.`);
+      this.isAuthenticated = false;
     }
   }
 
-  private async request(
-    method: string,
-    endpoint: string,
-    body?: any,
-    retryAuth: boolean = true
-  ): Promise<any> {
+  // Método helper para asegurar autenticación antes de operaciones
+  private async ensureAuth(): Promise<void> {
     await this.authenticateAdmin();
-
-    // Si no hay token y es un método que requiere autenticación (GET, DELETE, PATCH), intentar autenticarse de nuevo
-    if (!this.adminToken && retryAuth && (method === "GET" || method === "DELETE" || method === "PATCH")) {
-      const adminEmail = process.env.POCKETBASE_ADMIN_EMAIL;
-      const adminPassword = process.env.POCKETBASE_ADMIN_PASSWORD;
-      if (adminEmail && adminPassword) {
-        console.log("Reintentando autenticación antes de la operación...");
-        this.adminToken = null; // Forzar reintento
-        await this.authenticateAdmin();
-      }
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
-    if (this.adminToken) {
-      headers["Authorization"] = `Bearer ${this.adminToken}`;
-    } else {
-      console.warn(`⚠️  Realizando ${method} ${endpoint} sin token de admin. Esto puede fallar si las colecciones requieren autenticación.`);
-    }
-
-    // Configurar para ignorar certificados SSL si es necesario
-    if (typeof process !== "undefined" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "1") {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    }
-
-    // Si la URL base termina en /_/, removerlo para los endpoints de API
-    // (/_/ es solo para el panel web, la API está en la raíz)
-    let apiUrl = this.baseUrl;
-    if (apiUrl.endsWith("/_/")) {
-      apiUrl = apiUrl.replace("/_/", "/");
-    }
-
-    try {
-      const response = await fetch(`${apiUrl}${endpoint}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
-      // Si recibimos 401 (Unauthorized), el token puede haber expirado
-      if (response.status === 401 && this.adminToken && retryAuth) {
-        console.log("Token expirado, reintentando autenticación...");
-        this.adminToken = null;
-        await this.authenticateAdmin();
-        if (this.adminToken) {
-          headers["Authorization"] = `Bearer ${this.adminToken}`;
-          // Reintentar la petición una vez más
-          const retryResponse = await fetch(`${apiUrl}${endpoint}`, {
-            method,
-            headers,
-            body: body ? JSON.stringify(body) : undefined,
-          });
-          if (retryResponse.ok) {
-            return await retryResponse.json();
-          }
-        }
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `PocketBase error: ${response.status} ${response.statusText}`;
-        try {
-          const error = JSON.parse(errorText);
-          errorMessage = `PocketBase error: ${error.message || errorMessage}`;
-          
-          // Mensaje más descriptivo para errores de autenticación
-          if (response.status === 401 || response.status === 403) {
-            errorMessage += `. Las operaciones requieren autenticación de admin. Verifica POCKETBASE_ADMIN_EMAIL y POCKETBASE_ADMIN_PASSWORD.`;
-          }
-        } catch {
-          errorMessage = `PocketBase error: ${errorText || errorMessage}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      return await response.json();
-    } catch (error: any) {
-      if (error.message.includes("fetch failed") || error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
-        throw new Error(`No se pudo conectar a PocketBase en ${this.baseUrl}. Verifica que el servidor esté accesible.`);
-      }
-      throw error;
+    if (!this.isAuthenticated && !this.pb.authStore.isValid) {
+      console.warn("⚠️  No autenticado. Algunas operaciones pueden fallar.");
     }
   }
 
   async getUser(id: string): Promise<User | undefined> {
     try {
-      const data = await this.request("GET", `/api/collections/users/records/${id}`);
+      await this.ensureAuth();
+      const data = await this.pb.collection('users').getOne(id);
       return {
         id: data.id,
-        username: data.username,
-        password: data.password,
+        username: data.username || data.email || '',
+        password: '', // No devolver la contraseña
       };
     } catch (error: any) {
-      if (error.message.includes("404") || error.message.includes("Not found")) {
+      if (error.status === 404 || error.message.includes("Not found")) {
         return undefined;
       }
       throw error;
@@ -289,21 +175,21 @@ export class PocketBaseStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     try {
-      const data = await this.request(
-        "GET",
-        `/api/collections/users/records?filter=(username='${username}')&perPage=1`
-      );
-      if (data.items && data.items.length > 0) {
-        const item = data.items[0];
+      await this.ensureAuth();
+      const records = await this.pb.collection('users').getList(1, 1, {
+        filter: `username = "${username}"`,
+      });
+      if (records.items && records.items.length > 0) {
+        const item = records.items[0];
         return {
           id: item.id,
-          username: item.username,
-          password: item.password,
+          username: item.username || item.email || '',
+          password: '', // No devolver la contraseña
         };
       }
       return undefined;
     } catch (error: any) {
-      if (error.message.includes("404") || error.message.includes("Not found")) {
+      if (error.status === 404 || error.message.includes("Not found")) {
         return undefined;
       }
       throw error;
@@ -311,22 +197,21 @@ export class PocketBaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const data = await this.request("POST", "/api/collections/users/records", insertUser);
+    await this.ensureAuth();
+    const data = await this.pb.collection('users').create(insertUser);
     return {
       id: data.id,
-      username: data.username,
-      password: data.password,
+      username: data.username || data.email || '',
+      password: '', // No devolver la contraseña
     };
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
-    const data = await this.request(
-      "GET",
-      "/api/collections/transactions/records?sort=-created_at&perPage=500"
-    );
-    return (data.items || []).map((item: any, index: number) => ({
-      // Usar un hash del ID de PocketBase para generar un número único
-      // o usar el índice si el ID no es numérico
+    await this.ensureAuth();
+    const records = await this.pb.collection('transactions').getFullList({
+      sort: '-created',
+    });
+    return records.map((item: any, index: number) => ({
       id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
       date: item.date,
       description: item.description,
@@ -351,13 +236,12 @@ export class PocketBaseStorage implements IStorage {
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
     try {
-      // Buscar por id_number si existe, o buscar todas y filtrar
-      const data = await this.request(
-        "GET",
-        `/api/collections/transactions/records?filter=(id_number=${id})&perPage=1`
-      );
-      if (data.items && data.items.length > 0) {
-        const item = data.items[0];
+      await this.ensureAuth();
+      const records = await this.pb.collection('transactions').getList(1, 1, {
+        filter: `id_number = ${id}`,
+      });
+      if (records.items && records.items.length > 0) {
+        const item = records.items[0];
         return {
           id: item.id_number || this.hashStringToNumber(item.id) || id,
           date: item.date,
@@ -372,7 +256,7 @@ export class PocketBaseStorage implements IStorage {
       }
       return undefined;
     } catch (error: any) {
-      if (error.message.includes("404") || error.message.includes("Not found")) {
+      if (error.status === 404 || error.message.includes("Not found")) {
         return undefined;
       }
       throw error;
@@ -380,28 +264,26 @@ export class PocketBaseStorage implements IStorage {
   }
 
   async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    await this.ensureAuth();
+    
     // Obtener el máximo id_number para generar el siguiente
     let nextId = 1;
     try {
-      const existingData = await this.request(
-        "GET",
-        "/api/collections/transactions/records?sort=-id_number&perPage=1"
-      );
-      if (existingData.items && existingData.items.length > 0 && existingData.items[0].id_number) {
-        nextId = existingData.items[0].id_number + 1;
+      const existingRecords = await this.pb.collection('transactions').getList(1, 1, {
+        sort: '-id_number',
+      });
+      if (existingRecords.items && existingRecords.items.length > 0 && existingRecords.items[0].id_number) {
+        nextId = existingRecords.items[0].id_number + 1;
       }
     } catch (error) {
       // Si falla, empezamos desde 1
     }
 
-    const data = await this.request(
-      "POST",
-      "/api/collections/transactions/records",
-      {
-        ...transaction,
-        id_number: nextId,
-      }
-    );
+    const data = await this.pb.collection('transactions').create({
+      ...transaction,
+      id_number: nextId,
+    });
+    
     return {
       id: data.id_number || this.hashStringToNumber(data.id) || nextId,
       date: data.date,
@@ -484,21 +366,18 @@ export class PocketBaseStorage implements IStorage {
   }
 
   async updateTransaction(id: number, updates: Partial<InsertTransaction>): Promise<Transaction> {
+    await this.ensureAuth();
+    
     // Primero buscar el registro por id_number
-    const searchData = await this.request(
-      "GET",
-      `/api/collections/transactions/records?filter=(id_number=${id})&perPage=1`
-    );
-    if (!searchData.items || searchData.items.length === 0) {
+    const searchRecords = await this.pb.collection('transactions').getList(1, 1, {
+      filter: `id_number = ${id}`,
+    });
+    if (!searchRecords.items || searchRecords.items.length === 0) {
       throw new Error(`Transaction ${id} not found`);
     }
-    const recordId = searchData.items[0].id;
+    const recordId = searchRecords.items[0].id;
     
-    const data = await this.request(
-      "PATCH",
-      `/api/collections/transactions/records/${recordId}`,
-      updates
-    );
+    const data = await this.pb.collection('transactions').update(recordId, updates);
     return {
       id: data.id_number || this.hashStringToNumber(data.id) || id,
       date: data.date,
@@ -513,29 +392,29 @@ export class PocketBaseStorage implements IStorage {
   }
 
   async deleteTransaction(id: number): Promise<void> {
+    await this.ensureAuth();
+    
     // Buscar el registro por id_number
-    const searchData = await this.request(
-      "GET",
-      `/api/collections/transactions/records?filter=(id_number=${id})&perPage=1`
-    );
-    if (!searchData.items || searchData.items.length === 0) {
+    const searchRecords = await this.pb.collection('transactions').getList(1, 1, {
+      filter: `id_number = ${id}`,
+    });
+    if (!searchRecords.items || searchRecords.items.length === 0) {
       throw new Error(`Transaction ${id} not found`);
     }
-    const recordId = searchData.items[0].id;
-    await this.request("DELETE", `/api/collections/transactions/records/${recordId}`);
+    const recordId = searchRecords.items[0].id;
+    await this.pb.collection('transactions').delete(recordId);
   }
 
   async deleteAllTransactions(): Promise<void> {
-    // Obtener todos los IDs y eliminarlos
+    await this.ensureAuth();
+    
+    // Obtener todos los registros y eliminarlos
     let page = 1;
     let hasMore = true;
     
     while (hasMore) {
-      const data = await this.request(
-        "GET",
-        `/api/collections/transactions/records?perPage=500&page=${page}`
-      );
-      const items = data.items || [];
+      const records = await this.pb.collection('transactions').getList(page, 500);
+      const items = records.items || [];
       
       if (items.length === 0) {
         hasMore = false;
@@ -543,7 +422,7 @@ export class PocketBaseStorage implements IStorage {
       }
       
       for (const item of items) {
-        await this.request("DELETE", `/api/collections/transactions/records/${item.id}`);
+        await this.pb.collection('transactions').delete(item.id);
       }
       
       hasMore = items.length === 500;
