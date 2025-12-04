@@ -20,6 +20,13 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Ruta explícita para favicon con headers de no-cache
+  app.get('/favicon.png', (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  });
+  
   app.post("/api/upload", upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {

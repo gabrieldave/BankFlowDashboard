@@ -537,7 +537,59 @@ export default function Dashboard() {
 
   // Calcular datos del gráfico según el modo de vista
   const getChartData = () => {
-    if (!stats?.monthlyData || !Array.isArray(stats.monthlyData) || stats.monthlyData.length === 0) {
+    // Si no hay datos mensuales en stats, calcularlos desde las transacciones
+    let monthlyDataToUse = stats?.monthlyData || [];
+    
+    if (!monthlyDataToUse || !Array.isArray(monthlyDataToUse) || monthlyDataToUse.length === 0) {
+      // Calcular datos mensuales desde las transacciones
+      try {
+        const monthlyTotals: Record<string, { income: number; expense: number }> = {};
+        
+        transactionsArray.forEach(t => {
+          try {
+            if (!t?.date) return;
+            const date = new Date(t.date);
+            if (isNaN(date.getTime())) return;
+            
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            
+            if (!monthlyTotals[monthKey]) {
+              monthlyTotals[monthKey] = { income: 0, expense: 0 };
+            }
+            
+            const amount = parseFloat(String(t.amount || 0));
+            if (isNaN(amount)) return;
+            
+            if (t.type === 'income') {
+              monthlyTotals[monthKey].income += amount;
+            } else if (t.type === 'expense') {
+              monthlyTotals[monthKey].expense += amount;
+            }
+          } catch {
+            // Ignorar errores
+          }
+        });
+
+        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        
+        monthlyDataToUse = Object.entries(monthlyTotals)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .slice(-12) // Últimos 12 meses
+          .map(([key, { income, expense }]) => {
+            const [year, month] = key.split('-');
+            return {
+              name: `${monthNames[parseInt(month) - 1]} ${year.slice(2)}`,
+              income: parseFloat(income.toFixed(2)),
+              expense: parseFloat(expense.toFixed(2)),
+              balance: parseFloat((income - expense).toFixed(2)),
+            };
+          });
+      } catch {
+        return [];
+      }
+    }
+    
+    if (!monthlyDataToUse || monthlyDataToUse.length === 0) {
       return [];
     }
     
@@ -547,7 +599,7 @@ export default function Dashboard() {
         let cumulativeIncome = 0;
         let cumulativeExpense = 0;
         
-        return stats.monthlyData.map((month) => {
+        return monthlyDataToUse.map((month) => {
           if (!month || typeof month !== 'object') return null;
           cumulativeIncome += (month.income || 0);
           cumulativeExpense += (month.expense || 0);
@@ -561,7 +613,7 @@ export default function Dashboard() {
           };
         }).filter((item): item is NonNullable<typeof item> => item !== null);
       }
-      return stats.monthlyData.filter((month) => month && typeof month === 'object');
+      return monthlyDataToUse.filter((month) => month && typeof month === 'object');
     } catch {
       return [];
     }
@@ -897,41 +949,67 @@ export default function Dashboard() {
             <CardTitle className="font-heading text-lg">Gastos por Categoría</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] w-full relative">
-              {categoryDataWithColors.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  <p>No hay datos de categorías para mostrar</p>
-                </div>
-              ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryDataWithColors}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {categoryDataWithColors.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-              )}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Total Gastos</p>
-                  <p className="text-xl font-bold text-foreground">
-                    {formatCurrency(stats?.monthlyExpenses || 0, defaultCurrency)}
-                  </p>
+            <div className="space-y-4">
+              <div className="h-[250px] w-full relative">
+                {categoryDataWithColors.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <p>No hay datos de categorías para mostrar</p>
+                  </div>
+                ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryDataWithColors}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {categoryDataWithColors.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value: any) => formatCurrency(value, defaultCurrency)}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                )}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Total Gastos</p>
+                    <p className="text-xl font-bold text-foreground">
+                      {formatCurrency(stats?.monthlyExpenses || 0, defaultCurrency)}
+                    </p>
+                  </div>
                 </div>
               </div>
+              {categoryDataWithColors.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  {categoryDataWithColors.map((entry, index) => {
+                    const percentage = stats?.monthlyExpenses 
+                      ? ((entry.value / stats.monthlyExpenses) * 100).toFixed(1)
+                      : '0';
+                    return (
+                      <div key={`legend-${index}`} className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full flex-shrink-0" 
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{entry.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(entry.value, defaultCurrency)} ({percentage}%)
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
