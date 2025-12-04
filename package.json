@@ -28,7 +28,8 @@
     "fix-schema": "tsx server/fix-schema-definitivo.ts",
     "verificar-version": "tsx server/verificar-version-pocketbase.ts",
     "agregar-campos": "tsx server/agregar-campos-correcto.ts",
-    "agregar-campo-bank": "tsx server/agregar-campo-bank.ts"
+    "agregar-campo-bank": "tsx server/agregar-campo-bank.ts",
+    "fix-access-rules": "tsx server/fix-transactions-access-rules.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
