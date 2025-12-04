@@ -277,10 +277,29 @@ export class PocketBaseStorage implements IStorage {
             await wait(50); // Delay entre páginas
             const result = await this.pb.collection('transactions').getList(page, 500, {
               sort: strategy.sort || undefined,
+              expand: '', // No expandir relaciones, pero asegurar que se devuelvan todos los campos
             });
             
             if (result.items && result.items.length > 0) {
-              records.push(...result.items);
+              // Verificar que los items tengan los campos de datos
+              const firstItem = result.items[0];
+              if (!firstItem.date && !firstItem.description && !firstItem.amount) {
+                console.warn(`[getAllTransactions] Los items solo tienen metadata, intentando obtener campos individualmente...`);
+                // Si solo tiene metadata, intentar obtener los campos expandiendo
+                const expandedItems = await Promise.all(
+                  result.items.map(async (item: any) => {
+                    try {
+                      const fullRecord = await this.pb.collection('transactions').getOne(item.id);
+                      return fullRecord;
+                    } catch (e) {
+                      return item;
+                    }
+                  })
+                );
+                records.push(...expandedItems);
+              } else {
+                records.push(...result.items);
+              }
               hasMore = result.items.length === 500;
               page++;
               consecutiveErrors = 0;
