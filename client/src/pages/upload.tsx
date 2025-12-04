@@ -23,6 +23,8 @@ export default function UploadPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Analizando transacciones...");
   const [selectedBank, setSelectedBank] = useState<string>('');
+  const [customBank, setCustomBank] = useState<string>('');
+  const [useCustomBank, setUseCustomBank] = useState<boolean>(false);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -73,9 +75,27 @@ export default function UploadPage() {
   };
 
   const handleStartUpload = () => {
-    if (selectedFile) {
-      processFile(selectedFile, selectedBank || undefined);
+    if (!selectedFile) {
+      toast({
+        title: "Error",
+        description: "Por favor, selecciona un archivo primero",
+        variant: "destructive",
+      });
+      return;
     }
+
+    // Validar que se haya seleccionado o escrito un banco
+    const bankToUse = useCustomBank ? customBank.trim() : selectedBank;
+    if (!bankToUse || bankToUse === '') {
+      toast({
+        title: "Banco requerido",
+        description: "Por favor, selecciona un banco de la lista o escribe el nombre de tu banco",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    processFile(selectedFile, bankToUse);
   };
 
   // Restaurar estado de carga al montar el componente
@@ -365,6 +385,8 @@ export default function UploadPage() {
                       onClick={() => {
                         setSelectedFile(null);
                         setSelectedBank('');
+                        setCustomBank('');
+                        setUseCustomBank(false);
                       }}
                       className="text-muted-foreground hover:text-gray-900"
                     >
@@ -372,30 +394,71 @@ export default function UploadPage() {
                     </Button>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                       <Building2 className="w-4 h-4" />
-                      Banco (opcional - se detectará automáticamente si no seleccionas)
+                      Banco <span className="text-red-500">*</span>
                     </label>
-                    <Select value={selectedBank || "auto"} onValueChange={(value) => setSelectedBank(value === "auto" ? "" : value)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecciona un banco o déjalo en blanco para detección automática" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto">Detección automática</SelectItem>
-                        {banks.map((bank) => (
-                          <SelectItem key={bank.id} value={bank.id}>
-                            {bank.name} {bank.country && `(${bank.country})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    
+                    {!useCustomBank ? (
+                      <>
+                        <Select 
+                          value={selectedBank || ""} 
+                          onValueChange={(value) => {
+                            setSelectedBank(value);
+                            setCustomBank('');
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecciona un banco de la lista" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {banks.map((bank) => (
+                              <SelectItem key={bank.id} value={bank.id}>
+                                {bank.name} {bank.country && `(${bank.country})`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUseCustomBank(true);
+                            setSelectedBank('');
+                          }}
+                          className="text-sm text-primary hover:underline w-full text-left"
+                        >
+                          Mi banco no está en la lista
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          value={customBank}
+                          onChange={(e) => setCustomBank(e.target.value)}
+                          placeholder="Escribe el nombre de tu banco"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUseCustomBank(false);
+                            setCustomBank('');
+                          }}
+                          className="text-sm text-primary hover:underline w-full text-left"
+                        >
+                          Volver a la lista de bancos
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   <Button
                     onClick={handleStartUpload}
                     size="lg"
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={!selectedFile || (!useCustomBank && !selectedBank) || (useCustomBank && !customBank.trim())}
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                     data-testid="button-upload"
                   >
                     <Upload className="w-4 h-4 mr-2" />

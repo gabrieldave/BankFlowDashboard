@@ -112,7 +112,7 @@ export async function registerRoutes(
         });
       }
 
-      // Detectar o obtener el banco
+      // Detectar o obtener el banco - OBLIGATORIO
       let selectedBank: string | undefined = req.body.bank; // Si viene del body (selección manual)
       let detectedBankInfo = null;
       
@@ -147,10 +147,17 @@ export async function registerRoutes(
           }
         } catch (detectionError: any) {
           console.error("Error detectando banco:", detectionError);
-          console.log("⚠️  Continuando sin detección de banco");
+          console.log("⚠️  Error en detección automática de banco");
         }
       } else {
         console.log(`✓ Banco seleccionado manualmente: ${selectedBank}`);
+      }
+
+      // VALIDACIÓN: El banco es obligatorio
+      if (!selectedBank || selectedBank.trim() === '') {
+        return res.status(400).json({ 
+          error: "El banco es obligatorio. Por favor, selecciona un banco de la lista o escribe el nombre de tu banco si no aparece en la lista." 
+        });
       }
 
       let transactions;
