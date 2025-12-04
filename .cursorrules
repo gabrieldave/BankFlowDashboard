@@ -1,0 +1,95 @@
+# Reglas del Proyecto - BankFlowDashboard
+
+## PocketBase - Mejores Prácticas y Prevención de Errores
+
+### ⚠️ REGLAS CRÍTICAS PARA POCKETBASE
+
+1. **Manejo de URLs de PocketBase**
+   - SIEMPRE verificar si la URL termina en `/_/` antes de usar el SDK
+   - Para el SDK de PocketBase: REMOVER `/_/` del final de la URL
+   - Para la API REST: MANTENER `/_/` si está presente
+   - Ejemplo correcto: `https://estadosdecuenta-db.david-cloud.online` (sin `/_/`) para SDK
+   - Ejemplo correcto: `https://estadosdecuenta-db.david-cloud.online/_/` para API REST
+
+2. **Autenticación de Administrador**
+   - SIEMPRE verificar que `POCKETBASE_ADMIN_EMAIL` y `POCKETBASE_ADMIN_PASSWORD` estén configuradas
+   - Usar `_superusers` collection para autenticación en PocketBase v0.23+
+   - Método: `pb.collection('_superusers').authWithPassword(email, password)`
+   - SIEMPRE verificar `pb.authStore.isValid` antes de operaciones críticas
+   - Implementar manejo de errores de autenticación con mensajes claros
+
+3. **Creación de Colecciones y Schemas**
+   - NUNCA crear una colección sin definir TODOS los campos del schema primero
+   - SIEMPRE incluir todos los campos requeridos al crear la colección
+   - Usar `fields` (no `schema`) al actualizar colecciones existentes vía API
+   - Verificar que los campos se crearon correctamente después de la inicialización
+   - Campos requeridos para `transactions`: id_number, date, description, amount, type, category, merchant, currency
+
+4. **Reglas de Acceso (API Rules)**
+   - SIEMPRE configurar reglas de acceso al crear colecciones
+   - Para desarrollo: dejar reglas vacías (acceso completo) solo si PocketBase está protegido por firewall
+   - Para producción: implementar reglas de autenticación apropiadas
+   - Verificar reglas después de crear/modificar colecciones
+
+5. **Manejo de Errores Comunes**
+   - "Only superusers can perform this action": Verificar autenticación y reglas de acceso
+   - "Collection not found": Verificar que la colección existe antes de usarla
+   - Campos vacíos en registros: Verificar que el schema tiene todos los campos definidos
+   - Errores SSL: Configurar `NODE_TLS_REJECT_UNAUTHORIZED=0` solo en desarrollo, nunca en producción
+   - Errores de conexión: Verificar URL, firewall, y que el servidor esté en línea
+
+6. **Operaciones Concurrentes**
+   - Implementar locks para evitar múltiples llamadas simultáneas a `getAllTransactions()`
+   - Usar promesas compartidas para evitar duplicación de requests
+   - Limpiar locks después de completar operaciones
+
+7. **Validación de Datos**
+   - SIEMPRE validar que los datos existen antes de mapearlos
+   - Usar valores por defecto para campos opcionales (ej: currency = "MXN")
+   - Sanitizar strings con `.trim()` antes de guardar
+   - Validar tipos de datos (number, text, etc.) antes de insertar
+
+8. **Scripts de Inicialización**
+   - SIEMPRE ejecutar `npm run init-pocketbase` después de configurar variables de entorno
+   - Verificar que las colecciones se crearon correctamente con `npm run auditoria-pocketbase`
+   - Si hay problemas, usar `npm run agregar-campos` para corregir schemas
+
+9. **Variables de Entorno**
+   - SIEMPRE verificar que `POCKETBASE_URL` está configurada antes de inicializar
+   - Usar valores por defecto solo en desarrollo, nunca en producción
+   - Documentar todas las variables de entorno requeridas
+
+10. **Testing y Verificación**
+    - Después de cualquier cambio en PocketBase, ejecutar scripts de verificación
+    - Verificar autenticación, colecciones, schemas y reglas de acceso
+    - Probar operaciones CRUD básicas después de cambios
+
+### 📋 CHECKLIST ANTES DE USAR POCKETBASE
+
+- [ ] Variables de entorno configuradas (POCKETBASE_URL, POCKETBASE_ADMIN_EMAIL, POCKETBASE_ADMIN_PASSWORD)
+- [ ] URL formateada correctamente (sin `/_/` para SDK, con `/_/` para API REST)
+- [ ] Autenticación verificada y funcionando
+- [ ] Colecciones existen y tienen todos los campos del schema
+- [ ] Reglas de acceso configuradas apropiadamente
+- [ ] Manejo de errores implementado
+- [ ] Locks para operaciones concurrentes implementados
+- [ ] Validación de datos antes de insertar/actualizar
+
+### 🚫 ERRORES COMUNES A EVITAR
+
+1. ❌ Crear colecciones sin definir campos en el schema
+2. ❌ Usar URL con `/_/` para el SDK de PocketBase
+3. ❌ Olvidar verificar autenticación antes de operaciones
+4. ❌ No manejar errores de SSL en desarrollo
+5. ❌ Permitir múltiples llamadas concurrentes sin locks
+6. ❌ No validar datos antes de guardar
+7. ❌ Olvidar configurar reglas de acceso
+8. ❌ No verificar que las colecciones existen antes de usarlas
+
+### 📚 Referencias
+
+- Documentación de problemas: `SOLUCION_ERROR_POCKETBASE.md`, `SOLUCION_CAMPOS_VACIOS.md`
+- Scripts de auditoría: `server/auditoria-pocketbase.ts`
+- Scripts de inicialización: `server/init-pocketbase.ts`
+- Implementación de storage: `server/storage.ts`
+
