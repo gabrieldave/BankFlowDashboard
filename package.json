@@ -22,7 +22,12 @@
     "verificar-coleccion": "tsx server/verificar-y-corregir-coleccion.ts",
     "agregar-campos-schema": "tsx server/agregar-campos-schema.ts",
     "recrear-coleccion": "tsx server/eliminar-y-recrear-coleccion.ts",
-    "recrear-coleccion-sdk": "tsx server/recrear-coleccion-sdk.ts"
+    "recrear-coleccion-sdk": "tsx server/recrear-coleccion-sdk.ts",
+    "auditoria-pocketbase": "tsx server/auditoria-pocketbase.ts",
+    "corregir-schema": "tsx server/corregir-schema-completo.ts",
+    "fix-schema": "tsx server/fix-schema-definitivo.ts",
+    "verificar-version": "tsx server/verificar-version-pocketbase.ts",
+    "agregar-campos": "tsx server/agregar-campos-correcto.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
