@@ -275,9 +275,11 @@ export class PocketBaseStorage implements IStorage {
         while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
           try {
             await wait(50); // Delay entre páginas
+            // Intentar obtener con campos específicos usando fields
             const result = await this.pb.collection('transactions').getList(page, 500, {
               sort: strategy.sort || undefined,
-              expand: '', // No expandir relaciones, pero asegurar que se devuelvan todos los campos
+              fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
+              expand: '',
             });
             
             if (result.items && result.items.length > 0) {
