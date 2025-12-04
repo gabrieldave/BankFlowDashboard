@@ -101,6 +101,7 @@ export class MemStorage implements IStorage {
 export class PocketBaseStorage implements IStorage {
   private pb: PocketBase;
   private isAuthenticated: boolean = false;
+  private getAllTransactionsPromise: Promise<Transaction[]> | null = null; // Lock para evitar llamadas concurrentes
 
   constructor() {
     const baseUrl = process.env.POCKETBASE_URL || "";
@@ -207,44 +208,93 @@ export class PocketBaseStorage implements IStorage {
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
+    // Si ya hay una llamada en progreso, esperar a que termine
+    if (this.getAllTransactionsPromise) {
+      return this.getAllTransactionsPromise;
+    }
+
+    // Crear la promesa y guardarla como lock
+    this.getAllTransactionsPromise = this._getAllTransactionsInternal();
+    
+    try {
+      const result = await this.getAllTransactionsPromise;
+      return result;
+    } finally {
+      // Limpiar el lock después de completar
+      this.getAllTransactionsPromise = null;
+    }
+  }
+
+  private async _getAllTransactionsInternal(): Promise<Transaction[]> {
     await this.ensureAuth();
+    
+    // Helper para detectar errores de autocancelación
+    const isAutoCancelledError = (error: any): boolean => {
+      return error?.message?.includes('autocancelled') || 
+             error?.message?.includes('autocancel');
+    };
+
+    // Helper para esperar un poco antes de reintentar
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
     // Try different sort options, falling back if one fails
     let records: any[] = [];
-    try {
-      // First try sorting by created date (most common)
-      records = await this.pb.collection('transactions').getFullList({
-        sort: '-created',
-      });
-    } catch (error: any) {
-      console.warn("Error sorting by -created, trying alternative sorts:", error.message);
+    let lastError: any = null;
+    
+    // Intentar con diferentes estrategias, con delays para evitar autocancelación
+    const strategies = [
+      { name: '-created', fn: () => this.pb.collection('transactions').getFullList({ sort: '-created' }) },
+      { name: '-id', fn: () => this.pb.collection('transactions').getFullList({ sort: '-id' }) },
+      { name: 'no sort', fn: () => this.pb.collection('transactions').getFullList() },
+    ];
+
+    for (const strategy of strategies) {
       try {
-        // Try sorting by id (should always exist)
-        records = await this.pb.collection('transactions').getFullList({
-          sort: '-id',
-        });
-      } catch (error2: any) {
-        console.warn("Error sorting by -id, trying without sort:", error2.message);
+        await wait(100); // Pequeño delay para evitar autocancelación
+        records = await strategy.fn();
+        break; // Éxito, salir del loop
+      } catch (error: any) {
+        lastError = error;
+        if (isAutoCancelledError(error)) {
+          console.warn(`Solicitud autocancelada con estrategia "${strategy.name}", intentando siguiente...`);
+          await wait(200); // Esperar un poco más antes del siguiente intento
+          continue;
+        }
+        console.warn(`Error con estrategia "${strategy.name}":`, error.message);
+        // Si no es autocancelación, continuar con la siguiente estrategia
+      }
+    }
+
+    // Si todas las estrategias fallaron, intentar con paginación
+    if (records.length === 0 && lastError) {
+      console.warn("Todas las estrategias fallaron, intentando paginación...");
+      records = [];
+      let page = 1;
+      let hasMore = true;
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 3;
+
+      while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
         try {
-          // Try without sort
-          records = await this.pb.collection('transactions').getFullList();
-        } catch (error3: any) {
-          console.error("Error fetching transactions without sort:", error3.message);
-          // Last resort: use paginated getList
-          records = [];
-          let page = 1;
-          let hasMore = true;
-          while (hasMore) {
-            try {
-              const result = await this.pb.collection('transactions').getList(page, 500);
-              records.push(...(result.items || []));
-              hasMore = result.items && result.items.length === 500;
-              page++;
-            } catch (pageError: any) {
-              console.error(`Error fetching page ${page}:`, pageError.message);
-              hasMore = false;
-            }
+          await wait(150); // Delay entre páginas
+          const result = await this.pb.collection('transactions').getList(page, 500);
+          records.push(...(result.items || []));
+          hasMore = result.items && result.items.length === 500;
+          page++;
+          consecutiveErrors = 0; // Reset contador de errores
+        } catch (pageError: any) {
+          consecutiveErrors++;
+          if (isAutoCancelledError(pageError)) {
+            console.warn(`Página ${page} autocancelada, reintentando...`);
+            await wait(300); // Esperar más tiempo antes de reintentar
+            continue; // Reintentar la misma página
           }
+          console.error(`Error fetching page ${page}:`, pageError.message);
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            console.error("Demasiados errores consecutivos, deteniendo paginación");
+            break;
+          }
+          await wait(200);
         }
       }
     }
