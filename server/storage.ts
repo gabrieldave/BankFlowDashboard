@@ -275,12 +275,35 @@ export class PocketBaseStorage implements IStorage {
         while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
           try {
             await wait(50); // Delay entre páginas
-            // Intentar obtener con campos específicos usando fields
-            const result = await this.pb.collection('transactions').getList(page, 500, {
-              sort: strategy.sort || undefined,
-              fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
-              expand: '',
-            });
+            // Intentar obtener sin fields primero (PocketBase puede tener problemas con fields)
+            let result;
+            try {
+              result = await this.pb.collection('transactions').getList(page, 500, {
+                sort: strategy.sort || undefined,
+                expand: '',
+              });
+              
+              // Si solo viene metadata, intentar con fields
+              if (result.items && result.items.length > 0) {
+                const firstItem = result.items[0];
+                const hasDataFields = firstItem.date !== undefined || firstItem.description !== undefined || firstItem.amount !== undefined;
+                if (!hasDataFields) {
+                  console.warn(`[getAllTransactions] getList sin fields devolvió solo metadata, intentando con fields...`);
+                  result = await this.pb.collection('transactions').getList(page, 500, {
+                    sort: strategy.sort || undefined,
+                    fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
+                    expand: '',
+                  });
+                }
+              }
+            } catch (fieldsError: any) {
+              // Si falla con fields, intentar sin fields
+              console.warn(`[getAllTransactions] Error con fields, intentando sin fields:`, fieldsError.message);
+              result = await this.pb.collection('transactions').getList(page, 500, {
+                sort: strategy.sort || undefined,
+                expand: '',
+              });
+            }
             
             if (result.items && result.items.length > 0) {
               // Verificar que los items tengan los campos de datos
