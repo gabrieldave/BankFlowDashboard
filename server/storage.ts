@@ -119,8 +119,7 @@ export class PocketBaseStorage implements IStorage {
     const adminPassword = process.env.POCKETBASE_ADMIN_PASSWORD;
 
     if (!adminEmail || !adminPassword) {
-      // Si no hay credenciales de admin, intentamos sin autenticación
-      // (asumiendo que las colecciones son públicas o usan reglas de acceso)
+      console.error("⚠️  POCKETBASE_ADMIN_EMAIL y POCKETBASE_ADMIN_PASSWORD no están configuradas. Las operaciones pueden fallar si las colecciones requieren autenticación.");
       return;
     }
 
@@ -136,52 +135,66 @@ export class PocketBaseStorage implements IStorage {
         apiUrl = apiUrl.replace("/_/", "/");
       }
 
-      // Intentar diferentes endpoints de autenticación
-      const authEndpoints = [
-        "/api/admins/auth-with-password",
-        "/api/admins/auth",
-        "/api/auth/admins/with-password",
-      ];
+      // El endpoint correcto de PocketBase para autenticación de admin
+      const endpoint = "/api/admins/auth-with-password";
+      const authUrl = `${apiUrl}${endpoint}`;
 
-      for (const endpoint of authEndpoints) {
+      console.log(`Intentando autenticación en: ${authUrl} (email: ${adminEmail})`);
+
+      const response = await fetch(authUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identity: adminEmail,
+          password: adminPassword,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.adminToken = data.token;
+        console.log("✓ Autenticación exitosa como admin de PocketBase");
+        return;
+      } else {
+        const errorText = await response.text();
+        let errorMessage = `Error ${response.status}`;
         try {
-          const response = await fetch(`${apiUrl}${endpoint}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              identity: adminEmail,
-              password: adminPassword,
-            }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            this.adminToken = data.token;
-            console.log("✓ Autenticación exitosa como admin");
-            return;
-          } else {
-            const errorText = await response.text();
-            console.warn(`Endpoint ${endpoint} falló: ${response.status} - ${errorText.substring(0, 100)}`);
-          }
-        } catch (e: any) {
-          console.warn(`Error en endpoint ${endpoint}:`, e.message);
-          // Continuar con el siguiente endpoint
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.message || errorJson.error || errorMessage;
+        } catch {
+          errorMessage = errorText.substring(0, 200) || errorMessage;
         }
+        console.error(`❌ Error de autenticación (${response.status}): ${errorMessage}`);
+        console.error(`URL usada: ${authUrl}`);
+        console.error(`Verifica que las credenciales sean correctas y que el admin exista en PocketBase.`);
+        // No establecer adminToken, las siguientes operaciones fallarán pero mostrarán el error
+        return;
       }
-
-      console.warn("No se pudo autenticar como admin, continuando sin autenticación");
-    } catch (error) {
-      console.warn("Error al autenticar admin:", error);
-      // Continuar sin autenticación, las colecciones podrían ser públicas
+    } catch (error: any) {
+      console.error("❌ Error al intentar autenticarse como admin:", error.message);
+      console.error("Stack:", error.stack);
+      // No establecer adminToken
     }
   }
 
   private async request(
     method: string,
     endpoint: string,
-    body?: any
+    body?: any,
+    retryAuth: boolean = true
   ): Promise<any> {
     await this.authenticateAdmin();
+
+    // Si no hay token y es un método que requiere autenticación (GET, DELETE, PATCH), intentar autenticarse de nuevo
+    if (!this.adminToken && retryAuth && (method === "GET" || method === "DELETE" || method === "PATCH")) {
+      const adminEmail = process.env.POCKETBASE_ADMIN_EMAIL;
+      const adminPassword = process.env.POCKETBASE_ADMIN_PASSWORD;
+      if (adminEmail && adminPassword) {
+        console.log("Reintentando autenticación antes de la operación...");
+        this.adminToken = null; // Forzar reintento
+        await this.authenticateAdmin();
+      }
+    }
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -189,6 +202,8 @@ export class PocketBaseStorage implements IStorage {
 
     if (this.adminToken) {
       headers["Authorization"] = `Bearer ${this.adminToken}`;
+    } else {
+      console.warn(`⚠️  Realizando ${method} ${endpoint} sin token de admin. Esto puede fallar si las colecciones requieren autenticación.`);
     }
 
     // Configurar para ignorar certificados SSL si es necesario
@@ -210,12 +225,36 @@ export class PocketBaseStorage implements IStorage {
         body: body ? JSON.stringify(body) : undefined,
       });
 
+      // Si recibimos 401 (Unauthorized), el token puede haber expirado
+      if (response.status === 401 && this.adminToken && retryAuth) {
+        console.log("Token expirado, reintentando autenticación...");
+        this.adminToken = null;
+        await this.authenticateAdmin();
+        if (this.adminToken) {
+          headers["Authorization"] = `Bearer ${this.adminToken}`;
+          // Reintentar la petición una vez más
+          const retryResponse = await fetch(`${apiUrl}${endpoint}`, {
+            method,
+            headers,
+            body: body ? JSON.stringify(body) : undefined,
+          });
+          if (retryResponse.ok) {
+            return await retryResponse.json();
+          }
+        }
+      }
+
       if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = `PocketBase error: ${response.status} ${response.statusText}`;
         try {
           const error = JSON.parse(errorText);
           errorMessage = `PocketBase error: ${error.message || errorMessage}`;
+          
+          // Mensaje más descriptivo para errores de autenticación
+          if (response.status === 401 || response.status === 403) {
+            errorMessage += `. Las operaciones requieren autenticación de admin. Verifica POCKETBASE_ADMIN_EMAIL y POCKETBASE_ADMIN_PASSWORD.`;
+          }
         } catch {
           errorMessage = `PocketBase error: ${errorText || errorMessage}`;
         }
@@ -375,17 +414,72 @@ export class PocketBaseStorage implements IStorage {
     };
   }
 
-  async createTransactions(transactionsToInsert: InsertTransaction[]): Promise<Transaction[]> {
-    if (transactionsToInsert.length === 0) return [];
+  async createTransactions(transactionsToInsert: InsertTransaction[]): Promise<{ saved: Transaction[]; duplicates: number; skipped: number }> {
+    if (transactionsToInsert.length === 0) return { saved: [], duplicates: 0, skipped: 0 };
 
-    // PocketBase no tiene bulk insert nativo, así que hacemos múltiples requests
-    // o podemos usar un endpoint personalizado si existe
-    const results: Transaction[] = [];
-    for (const transaction of transactionsToInsert) {
-      const result = await this.createTransaction(transaction);
-      results.push(result);
+    // Obtener todas las transacciones existentes para detectar duplicados
+    let existingTransactions: Transaction[] = [];
+    try {
+      existingTransactions = await this.getAllTransactions();
+    } catch (error) {
+      console.warn("No se pudieron obtener transacciones existentes para detección de duplicados:", error);
     }
-    return results;
+
+    // Función para normalizar y comparar transacciones
+    const normalizeTransaction = (t: InsertTransaction | Transaction) => {
+      const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+      return {
+        date: t.date.trim().toLowerCase(),
+        description: t.description.trim().toLowerCase().substring(0, 100), // Limitar longitud
+        amount: Math.abs(amount).toFixed(2), // Normalizar monto (sin signo, 2 decimales)
+        type: t.type,
+      };
+    };
+
+    // Crear un Set de transacciones existentes normalizadas para búsqueda rápida
+    const existingSet = new Set(
+      existingTransactions.map(t => {
+        const normalized = normalizeTransaction(t);
+        return `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+      })
+    );
+
+    // Filtrar duplicados
+    const uniqueTransactions: InsertTransaction[] = [];
+    let duplicates = 0;
+
+    for (const transaction of transactionsToInsert) {
+      const normalized = normalizeTransaction(transaction);
+      const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+      
+      if (existingSet.has(key)) {
+        duplicates++;
+        continue; // Omitir duplicado
+      }
+
+      // Agregar a la lista de únicos y al set para evitar duplicados dentro del mismo batch
+      existingSet.add(key);
+      uniqueTransactions.push(transaction);
+    }
+
+    // Insertar solo las transacciones únicas
+    const results: Transaction[] = [];
+    for (const transaction of uniqueTransactions) {
+      try {
+        const result = await this.createTransaction(transaction);
+        results.push(result);
+      } catch (error: any) {
+        // Si falla la inserción (puede ser duplicado que se insertó entre la verificación y la inserción)
+        console.warn("Error insertando transacción (puede ser duplicado):", error.message);
+        duplicates++;
+      }
+    }
+
+    return {
+      saved: results,
+      duplicates,
+      skipped: transactionsToInsert.length - results.length - duplicates,
+    };
   }
 
   async updateTransaction(id: number, updates: Partial<InsertTransaction>): Promise<Transaction> {

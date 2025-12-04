@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Upload, FileText, CheckCircle2, AlertCircle, FileType, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,6 +15,7 @@ export default function UploadPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Analizando transacciones...");
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Mensajes dinámicos que rotan durante el procesamiento
   const statusMessages = [
@@ -51,55 +52,100 @@ export default function UploadPage() {
     }
   };
 
+  // Cleanup al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   const processFile = async (file: File) => {
+    // Cancelar cualquier petición anterior
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
     setStatusMessage("Iniciando procesamiento...");
 
+    // AbortController para cancelar la petición si el componente se desmonta
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     // Simular progreso más realista con mensajes dinámicos
     let messageIndex = 0;
     const messageInterval = setInterval(() => {
-      setStatusMessage(statusMessages[messageIndex % statusMessages.length]);
-      messageIndex++;
+      if (!abortController.signal.aborted) {
+        setStatusMessage(statusMessages[messageIndex % statusMessages.length]);
+        messageIndex++;
+      }
     }, 2000);
 
     // Progreso más suave y realista
     let progress = 0;
     const progressInterval = setInterval(() => {
-      // Incremento más lento al principio, más rápido al final
-      const increment = progress < 30 ? 1 : progress < 70 ? 2 : progress < 90 ? 1.5 : 0.5;
-      progress = Math.min(progress + increment, 95);
-      setUploadProgress(progress);
+      if (!abortController.signal.aborted) {
+        // Incremento más lento al principio, más rápido al final
+        const increment = progress < 30 ? 1 : progress < 70 ? 2 : progress < 90 ? 1.5 : 0.5;
+        progress = Math.min(progress + increment, 95);
+        setUploadProgress(progress);
+      }
     }, 300);
 
-    try {
-      const result = await uploadFile(file);
-      
+    // Cleanup function para limpiar intervalos
+    const cleanup = () => {
       clearInterval(progressInterval);
       clearInterval(messageInterval);
-      setUploadProgress(100);
-      setStatusMessage("¡Procesamiento completado!");
+    };
 
-      setTimeout(() => {
-        toast({
-          title: "¡Archivo procesado!",
-          description: result.message,
-        });
-        setLocation("/dashboard");
-      }, 1000);
-    } catch (error: any) {
-      clearInterval(progressInterval);
-      clearInterval(messageInterval);
-      setIsUploading(false);
-      setUploadProgress(0);
-      setStatusMessage("Error al procesar");
+    try {
+      const result = await uploadFile(file, abortController.signal);
       
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo procesar el archivo",
-        variant: "destructive",
-      });
+      // Solo actualizar si no fue cancelado
+      if (!abortController.signal.aborted) {
+        cleanup();
+        setUploadProgress(100);
+        setStatusMessage("¡Procesamiento completado!");
+
+        setTimeout(() => {
+          if (!abortController.signal.aborted) {
+            toast({
+              title: "¡Archivo procesado!",
+              description: result.message,
+            });
+            setLocation("/dashboard");
+          }
+        }, 1000);
+      }
+    } catch (error: any) {
+      cleanup();
+      
+      // Solo mostrar error si no fue cancelado intencionalmente
+      if (!abortController.signal.aborted && error.name !== 'AbortError') {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setStatusMessage("Error al procesar");
+        
+        toast({
+          title: "Error",
+          description: error.message || "No se pudo procesar el archivo",
+          variant: "destructive",
+        });
+      } else if (error.name === 'AbortError') {
+        // Fue cancelado, solo resetear estado
+        setIsUploading(false);
+        setUploadProgress(0);
+      }
     }
+
+    // Cleanup al desmontar
+    return () => {
+      abortController.abort();
+      cleanup();
+    };
   };
 
   return (

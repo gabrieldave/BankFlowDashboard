@@ -67,11 +67,19 @@ export async function registerRoutes(
         });
       }
 
-      const saved = await storage.createTransactions(validTransactions);
+      // Detectar y filtrar duplicados antes de guardar
+      const { saved, duplicates, skipped } = await storage.createTransactions(validTransactions);
+
+      let message = `${saved.length} transacciones importadas correctamente`;
+      if (duplicates > 0) {
+        message += `. ${duplicates} duplicadas omitidas`;
+      }
 
       res.json({
-        message: `${saved.length} transacciones importadas correctamente`,
+        message,
         count: saved.length,
+        duplicates,
+        skipped,
         transactions: saved,
       });
     } catch (error: any) {

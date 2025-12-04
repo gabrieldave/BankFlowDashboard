@@ -135,10 +135,56 @@ Si las colecciones no existen, puedes:
 - Asegúrate de que no haya problemas de firewall
 - Verifica que la URL sea correcta
 
+### Error: "No se pudo autenticar como admin" o "Error de autenticación"
+
+Si ves múltiples mensajes de "No se pudo autenticar como admin" en los logs, significa que las credenciales de admin no están configuradas correctamente o son incorrectas.
+
+**Pasos para resolver:**
+
+1. **Verifica las variables de entorno en Coolify:**
+   - Ve a tu aplicación en Coolify
+   - Ve a la sección **"Environment Variables"**
+   - Verifica que `POCKETBASE_ADMIN_EMAIL` y `POCKETBASE_ADMIN_PASSWORD` estén configuradas
+   - Asegúrate de que NO tengan espacios al inicio o al final
+   - Verifica que el email sea el mismo que usas para acceder al panel de PocketBase
+
+2. **Verifica las credenciales en PocketBase:**
+   - Accede a `https://estadosdecuenta-db.david-cloud.online/_/`
+   - Inicia sesión con las credenciales de admin
+   - Si no puedes iniciar sesión, las credenciales son incorrectas
+
+3. **Actualiza las variables en Coolify:**
+   - Si las credenciales son incorrectas, actualízalas en Coolify
+   - Después de actualizar, haz un **"Redeploy"** de la aplicación
+   - Verifica los logs nuevamente, deberías ver "✓ Autenticación exitosa como admin de PocketBase"
+
+4. **Si las credenciales son correctas pero aún falla:**
+   - Verifica que la URL de PocketBase esté correcta: debe terminar en `/_/`
+   - Revisa los logs para ver el error específico de autenticación
+   - Asegúrate de que PocketBase esté accesible desde el servidor de Coolify
+
+**⚠️ IMPORTANTE:** Sin autenticación de admin, las operaciones de lectura (GET) fallarán. La aplicación necesita autenticación de admin para:
+- Obtener transacciones (`/api/transactions`)
+- Obtener estadísticas (`/api/stats`)
+- Actualizar o eliminar transacciones
+
+Las operaciones de escritura (POST, como subir archivos) pueden funcionar si las colecciones tienen reglas de acceso públicas para crear.
+
 ### Error: "Collection not found"
 - Las colecciones no están creadas
 - Créalas manualmente desde el panel de PocketBase
 - O configura las credenciales de admin para creación automática
+
+### Error: "PocketBase error: Something went wrong while processing your request"
+
+Este error generalmente indica que:
+1. **No hay autenticación de admin**: Las colecciones requieren autenticación para leer/actualizar/eliminar
+2. **Las reglas de acceso están restringidas**: Las colecciones solo permiten operaciones con autenticación
+
+**Solución:**
+- Configura correctamente `POCKETBASE_ADMIN_EMAIL` y `POCKETBASE_ADMIN_PASSWORD` en Coolify
+- Haz un redeploy después de actualizar las variables
+- Verifica en los logs que aparezca "✓ Autenticación exitosa como admin de PocketBase"
 
 ### La aplicación no inicia
 - Revisa los logs en Coolify

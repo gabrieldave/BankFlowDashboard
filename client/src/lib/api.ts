@@ -32,13 +32,14 @@ export interface Stats {
   mostFrequentMerchant?: { name: string; count: number } | null;
 }
 
-export async function uploadFile(file: File): Promise<{ message: string; count: number; transactions: Transaction[] }> {
+export async function uploadFile(file: File, signal?: AbortSignal): Promise<{ message: string; count: number; transactions: Transaction[] }> {
   const formData = new FormData();
   formData.append('file', file);
 
   const response = await fetch('/api/upload', {
     method: 'POST',
     body: formData,
+    signal, // Pasar el signal para poder cancelar
   });
 
   if (!response.ok) {
