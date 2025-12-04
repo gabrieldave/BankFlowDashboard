@@ -202,10 +202,16 @@ export async function registerRoutes(
 
   app.get("/api/transactions", async (req, res) => {
     try {
+      console.log("[GET /api/transactions] Iniciando obtención de transacciones...");
       const transactions = await storage.getAllTransactions();
+      console.log(`[GET /api/transactions] Transacciones obtenidas: ${transactions.length}`);
+      if (transactions.length > 0) {
+        console.log(`[GET /api/transactions] Primera transacción:`, JSON.stringify(transactions[0], null, 2));
+      }
       res.json(transactions);
     } catch (error: any) {
-      console.error("Error obteniendo transacciones:", error);
+      console.error("[GET /api/transactions] Error obteniendo transacciones:", error);
+      console.error("[GET /api/transactions] Stack trace:", error.stack);
       res.status(500).json({ error: "Error obteniendo transacciones" });
     }
   });
