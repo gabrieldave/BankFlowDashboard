@@ -208,24 +208,32 @@ export class PocketBaseStorage implements IStorage {
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
+    const startTime = Date.now();
+    console.log('🚀 [getAllTransactions] INICIANDO obtención de transacciones...');
+    
     // Si ya hay una llamada en progreso, esperar a que termine (con timeout)
     if (this.getAllTransactionsPromise) {
+      console.log('⏳ [getAllTransactions] Esperando que termine llamada anterior...');
       try {
         // Esperar máximo 60 segundos para que termine la llamada anterior
-        return await Promise.race([
+        const result = await Promise.race([
           this.getAllTransactionsPromise,
           new Promise<Transaction[]>((_, reject) => 
             setTimeout(() => reject(new Error('Timeout esperando llamada anterior')), 60000)
           )
         ]);
-      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.log(`✅ [getAllTransactions] COMPLETADO en ${duration}ms (esperó llamada anterior)`);
+        return result;
+      } catch (error: any) {
         // Si la llamada anterior falló o se colgó, limpiar el lock y continuar
-        console.warn('[getAllTransactions] Limpiando lock bloqueado:', error);
+        console.warn('⚠️  [getAllTransactions] Limpiando lock bloqueado:', error?.message || error);
         this.getAllTransactionsPromise = null;
       }
     }
 
     // Crear la promesa y guardarla como lock
+    console.log('🔒 [getAllTransactions] Creando nueva llamada (lock activado)');
     this.getAllTransactionsPromise = this._getAllTransactionsInternal();
     
     try {
@@ -236,30 +244,44 @@ export class PocketBaseStorage implements IStorage {
           setTimeout(() => reject(new Error('Timeout obteniendo transacciones (90s)')), 90000)
         )
       ]);
+      const duration = Date.now() - startTime;
+      console.log(`✅ [getAllTransactions] COMPLETADO EXITOSAMENTE en ${duration}ms - ${result.length} transacciones obtenidas`);
       return result;
     } catch (error: any) {
-      console.error('[getAllTransactions] Error con timeout:', error.message);
+      const duration = Date.now() - startTime;
+      console.error(`❌ [getAllTransactions] ERROR después de ${duration}ms:`, error.message);
+      console.error(`❌ [getAllTransactions] Stack:`, error.stack);
       // Si hay error, devolver array vacío en lugar de fallar completamente
       return [];
     } finally {
       // SIEMPRE limpiar el lock después de completar (incluso si hay error)
       this.getAllTransactionsPromise = null;
+      const duration = Date.now() - startTime;
+      console.log(`🔓 [getAllTransactions] Lock liberado después de ${duration}ms`);
     }
   }
 
   private async _getAllTransactionsInternal(): Promise<Transaction[]> {
+    const internalStartTime = Date.now();
+    console.log('🔐 [getAllTransactions] Verificando autenticación...');
     await this.ensureAuth();
     
     // Verificar estado de autenticación
     const isAuthValid = this.isAuthenticated && this.pb.authStore.isValid;
-    console.log(`[getAllTransactions] Estado de autenticación: ${isAuthValid ? '✓ Autenticado' : '✗ No autenticado'}`);
+    if (isAuthValid) {
+      console.log('✅ [getAllTransactions] Estado de autenticación: ✓ Autenticado');
+    } else {
+      console.warn('⚠️  [getAllTransactions] Estado de autenticación: ✗ No autenticado');
+    }
     
     // Intentar obtener un conteo rápido de transacciones para diagnóstico
     try {
+      console.log('🔍 [getAllTransactions] Realizando test de conexión...');
       const testResult = await this.pb.collection('transactions').getList(1, 1);
-      console.log(`[getAllTransactions] Test de conexión: ${testResult.totalItems || 0} transacciones totales según PocketBase`);
+      const totalItems = testResult.totalItems || 0;
+      console.log(`📊 [getAllTransactions] Test de conexión exitoso: ${totalItems} transacciones totales según PocketBase`);
     } catch (testError: any) {
-      console.warn(`[getAllTransactions] Error en test de conexión:`, testError.message);
+      console.warn(`⚠️  [getAllTransactions] Error en test de conexión:`, testError.message);
     }
     
     // Helper para detectar errores de autocancelación
@@ -305,14 +327,18 @@ export class PocketBaseStorage implements IStorage {
       { name: 'no sort', sort: '' },
     ];
 
+    console.log(`🔄 [getAllTransactions] Intentando ${strategies.length} estrategias de ordenamiento...`);
+
     for (const strategy of strategies) {
       try {
+        console.log(`🔄 [getAllTransactions] Probando estrategia: "${strategy.name}"`);
         await wait(100); // Pequeño delay para evitar autocancelación
         records = [];
         let page = 1;
         let hasMore = true;
         let consecutiveErrors = 0;
         const maxConsecutiveErrors = 3;
+        const strategyStartTime = Date.now();
 
         while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
           try {
@@ -322,6 +348,9 @@ export class PocketBaseStorage implements IStorage {
             // Intentar obtener sin fields primero (PocketBase puede tener problemas con fields)
             let result;
             try {
+              if (page === 1) {
+                console.log(`📄 [getAllTransactions] Obteniendo página ${page} (estrategia: "${strategy.name}")...`);
+              }
               result = await withTimeout(
                 this.pb.collection('transactions').getList(page, 500, {
                   sort: strategy.sort || undefined,
@@ -336,7 +365,7 @@ export class PocketBaseStorage implements IStorage {
                 const firstItem = result.items[0];
                 const hasDataFields = firstItem.date !== undefined || firstItem.description !== undefined || firstItem.amount !== undefined;
                 if (!hasDataFields) {
-                  console.warn(`[getAllTransactions] getList sin fields devolvió solo metadata, intentando con fields...`);
+                  console.warn(`⚠️  [getAllTransactions] Página ${page}: getList sin fields devolvió solo metadata, intentando con fields...`);
                   result = await withTimeout(
                     this.pb.collection('transactions').getList(page, 500, {
                       sort: strategy.sort || undefined,
@@ -350,7 +379,7 @@ export class PocketBaseStorage implements IStorage {
               }
             } catch (fieldsError: any) {
               // Si falla con fields, intentar sin fields
-              console.warn(`[getAllTransactions] Error con fields, intentando sin fields:`, fieldsError.message);
+              console.warn(`⚠️  [getAllTransactions] Página ${page}: Error con fields, intentando sin fields:`, fieldsError.message);
               result = await withTimeout(
                 this.pb.collection('transactions').getList(page, 500, {
                   sort: strategy.sort || undefined,
@@ -368,12 +397,12 @@ export class PocketBaseStorage implements IStorage {
               const onlyMetadata = firstItem.collectionId && firstItem.collectionName && firstItem.id && !hasDataFields;
               
               if (onlyMetadata) {
-                console.warn(`[getAllTransactions] Los items solo tienen metadata (página ${page}), obteniendo campos individualmente...`);
-                console.log(`[getAllTransactions] Primer item (solo metadata):`, JSON.stringify(firstItem));
+                console.warn(`⚠️  [getAllTransactions] Página ${page}: Los items solo tienen metadata, obteniendo campos individualmente...`);
+                console.log(`📋 [getAllTransactions] Primer item (solo metadata):`, JSON.stringify(firstItem));
                 // Si solo tiene metadata, obtener cada registro individualmente
                 // LIMITAR a máximo 100 registros por página para evitar timeouts
                 const itemsToExpand = result.items.slice(0, 100);
-                console.warn(`[getAllTransactions] Expandiendo ${itemsToExpand.length} registros (limitado de ${result.items.length})`);
+                console.warn(`🔄 [getAllTransactions] Expandiendo ${itemsToExpand.length} registros (limitado de ${result.items.length})`);
                 
                 const expandedItems = await Promise.all(
                   itemsToExpand.map(async (item: any, idx: number) => {
@@ -404,13 +433,13 @@ export class PocketBaseStorage implements IStorage {
                           if (response.ok) {
                             const fullRecord = await response.json();
                             if (idx === 0) {
-                              console.log(`[getAllTransactions] Primer registro expandido (API REST con fields):`, JSON.stringify(fullRecord));
+                              console.log(`✅ [getAllTransactions] Primer registro expandido (API REST con fields):`, JSON.stringify(fullRecord));
                             }
                             // Verificar que tiene campos de datos
                             if (fullRecord.date || fullRecord.description || fullRecord.amount !== undefined) {
                               return fullRecord;
                             } else {
-                              console.warn(`[getAllTransactions] API REST con fields devolvió solo metadata, intentando sin fields...`);
+                              console.warn(`⚠️  [getAllTransactions] API REST con fields devolvió solo metadata, intentando sin fields...`);
                               // Intentar sin fields parameter
                               const response2 = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}`, {
                                 headers: {
@@ -428,7 +457,7 @@ export class PocketBaseStorage implements IStorage {
                             }
                           }
                         } catch (fetchError: any) {
-                          console.warn(`[getAllTransactions] Error en fetch API REST:`, fetchError.message);
+                          console.warn(`⚠️  [getAllTransactions] Error en fetch API REST para registro ${item.id}:`, fetchError.message);
                         }
                       }
                       
@@ -442,22 +471,22 @@ export class PocketBaseStorage implements IStorage {
                           `getOne registro ${item.id}`
                         );
                         if (idx === 0) {
-                          console.log(`[getAllTransactions] Primer registro expandido (SDK):`, JSON.stringify(fullRecord));
+                          console.log(`✅ [getAllTransactions] Primer registro expandido (SDK):`, JSON.stringify(fullRecord));
                         }
                         // Si el SDK también devuelve solo metadata, intentar con API REST sin fields
                         if (!fullRecord.date && !fullRecord.description && fullRecord.amount === undefined) {
-                          console.warn(`[getAllTransactions] SDK también devolvió solo metadata, intentando API REST sin fields...`);
+                          console.warn(`⚠️  [getAllTransactions] SDK también devolvió solo metadata, intentando API REST sin fields...`);
                           if (apiUrl && token) {
                             const response2 = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}`, {
                               headers: {
                                 'Authorization': `Bearer ${token}`,
                               },
-                              signal: AbortSignal.timeout(5000), // Timeout de 5 segundos
+                              signal: createTimeoutSignal(5000), // Timeout de 5 segundos
                             });
                             if (response2.ok) {
                               const fullRecord2 = await response2.json();
                               if (idx === 0) {
-                                console.log(`[getAllTransactions] Registro obtenido sin fields:`, JSON.stringify(fullRecord2));
+                                console.log(`✅ [getAllTransactions] Registro obtenido sin fields:`, JSON.stringify(fullRecord2));
                               }
                               return fullRecord2;
                             }
@@ -465,14 +494,14 @@ export class PocketBaseStorage implements IStorage {
                         }
                         return fullRecord;
                       } catch (sdkError: any) {
-                        console.warn(`[getAllTransactions] Error con SDK getOne:`, sdkError.message);
+                        console.warn(`⚠️  [getAllTransactions] Error con SDK getOne para registro ${item.id}:`, sdkError.message);
                         // Último intento: API REST sin fields
                         if (apiUrl && token) {
                           const response3 = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}`, {
                             headers: {
                               'Authorization': `Bearer ${token}`,
                             },
-                            signal: AbortSignal.timeout(5000), // Timeout de 5 segundos
+                            signal: createTimeoutSignal(5000), // Timeout de 5 segundos
                           });
                           if (response3.ok) {
                             return await response3.json();
@@ -481,8 +510,10 @@ export class PocketBaseStorage implements IStorage {
                         throw sdkError;
                       }
                     } catch (e: any) {
-                      console.warn(`[getAllTransactions] Error obteniendo registro ${item.id}:`, e.message);
-                      console.warn(`[getAllTransactions] Stack:`, e.stack);
+                      console.warn(`⚠️  [getAllTransactions] Error obteniendo registro ${item.id}:`, e.message);
+                      if (e.stack) {
+                        console.warn(`📚 [getAllTransactions] Stack:`, e.stack);
+                      }
                       return item; // Devolver el item original si falla
                     }
                   })
@@ -492,57 +523,73 @@ export class PocketBaseStorage implements IStorage {
                 records.push(...result.items);
               }
               hasMore = result.items.length === 500;
+              if (page % 5 === 0 || !hasMore) {
+                console.log(`📄 [getAllTransactions] Página ${page} procesada: ${result.items.length} registros (total acumulado: ${records.length})`);
+              }
               page++;
               consecutiveErrors = 0;
             } else {
               hasMore = false;
+              console.log(`📄 [getAllTransactions] Página ${page}: Sin más registros`);
             }
           } catch (pageError: any) {
             consecutiveErrors++;
             if (isAutoCancelledError(pageError)) {
-              console.warn(`Página ${page} autocancelada con estrategia "${strategy.name}", reintentando...`);
+              console.warn(`⚠️  [getAllTransactions] Página ${page} autocancelada con estrategia "${strategy.name}", reintentando... (intento ${consecutiveErrors}/${maxConsecutiveErrors})`);
               await wait(200);
               continue;
             }
+            console.error(`❌ [getAllTransactions] Error en página ${page} (intento ${consecutiveErrors}/${maxConsecutiveErrors}):`, pageError.message);
             if (consecutiveErrors >= maxConsecutiveErrors) {
+              console.error(`❌ [getAllTransactions] Máximo de errores consecutivos alcanzado para estrategia "${strategy.name}"`);
               throw pageError; // Lanzar error para que se intente la siguiente estrategia
             }
             await wait(100);
           }
         }
 
+        const strategyDuration = Date.now() - strategyStartTime;
         if (records && records.length > 0) {
-          console.log(`✓ Estrategia "${strategy.name}" exitosa: ${records.length} registros obtenidos`);
+          console.log(`✅ [getAllTransactions] Estrategia "${strategy.name}" EXITOSA en ${strategyDuration}ms: ${records.length} registros obtenidos`);
           strategySuccess = true;
           break; // Éxito, salir del loop
         } else {
-          console.log(`⚠ Estrategia "${strategy.name}" devolvió 0 registros, intentando siguiente...`);
+          console.log(`⚠️  [getAllTransactions] Estrategia "${strategy.name}" devolvió 0 registros después de ${strategyDuration}ms, intentando siguiente...`);
           // Continuar con la siguiente estrategia si devuelve 0 registros
           continue;
         }
       } catch (error: any) {
         lastError = error;
+        const strategyDuration = Date.now() - strategyStartTime;
         if (isAutoCancelledError(error)) {
-          console.warn(`Solicitud autocancelada con estrategia "${strategy.name}", intentando siguiente...`);
+          console.warn(`⚠️  [getAllTransactions] Solicitud autocancelada con estrategia "${strategy.name}" después de ${strategyDuration}ms, intentando siguiente...`);
           await wait(200); // Esperar un poco más antes del siguiente intento
           continue;
         }
-        console.warn(`Error con estrategia "${strategy.name}":`, error.message);
+        console.error(`❌ [getAllTransactions] Error con estrategia "${strategy.name}" después de ${strategyDuration}ms:`, error.message);
+        if (error.stack) {
+          console.error(`📚 [getAllTransactions] Stack:`, error.stack);
+        }
         // Si no es autocancelación, continuar con la siguiente estrategia
       }
     }
 
     // Si todas las estrategias fallaron
     if (!strategySuccess || records.length === 0) {
-      console.warn(`⚠ No se pudieron obtener transacciones después de intentar todas las estrategias. Último error: ${lastError?.message || 'N/A'}`);
+      const totalDuration = Date.now() - internalStartTime;
+      console.error(`❌ [getAllTransactions] FALLO después de ${totalDuration}ms: No se pudieron obtener transacciones después de intentar todas las estrategias`);
+      console.error(`❌ [getAllTransactions] Último error: ${lastError?.message || 'N/A'}`);
+      if (lastError?.stack) {
+        console.error(`📚 [getAllTransactions] Stack del último error:`, lastError.stack);
+      }
       // Devolver array vacío en lugar de fallar completamente
       return [];
     }
     
     // Log para diagnóstico
-    console.log(`[getAllTransactions] Registros obtenidos antes de procesar: ${records.length}`);
+    console.log(`📊 [getAllTransactions] Registros obtenidos antes de procesar: ${records.length}`);
     if (records.length > 0) {
-      console.log(`[getAllTransactions] Ejemplo de primer registro:`, JSON.stringify(records[0], null, 2));
+      console.log(`📋 [getAllTransactions] Ejemplo de primer registro:`, JSON.stringify(records[0], null, 2));
     }
     
     // Sort records by date in memory if we couldn't sort on the server
@@ -550,15 +597,18 @@ export class PocketBaseStorage implements IStorage {
     if (records.length > 0) {
       const hasCreatedField = records.some(r => r.created);
       if (!hasCreatedField) {
+        console.log(`🔄 [getAllTransactions] Ordenando registros por fecha en memoria...`);
         records.sort((a, b) => {
           const dateA = new Date(a.date || 0).getTime();
           const dateB = new Date(b.date || 0).getTime();
           return dateB - dateA; // Descending order (newest first)
         });
+        console.log(`✅ [getAllTransactions] Ordenamiento completado`);
       }
     }
     
     // Filtrar y mapear registros
+    console.log(`🔍 [getAllTransactions] Filtrando registros inválidos...`);
     const filtered = records.filter((item: any) => {
       // Filtrar registros inválidos - ser más permisivo
       if (!item || typeof item !== 'object') {
@@ -572,8 +622,13 @@ export class PocketBaseStorage implements IStorage {
       return hasDate || hasDescription || hasAmount;
     });
     
-    console.log(`[getAllTransactions] Registros después del filtro: ${filtered.length}`);
+    const filteredOut = records.length - filtered.length;
+    if (filteredOut > 0) {
+      console.warn(`⚠️  [getAllTransactions] ${filteredOut} registros filtrados (inválidos)`);
+    }
+    console.log(`✅ [getAllTransactions] Registros después del filtro: ${filtered.length}`);
     
+    console.log(`🔄 [getAllTransactions] Mapeando registros a formato interno...`);
     const mapped = filtered.map((item: any, index: number) => ({
       id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
       date: String(item.date || '').trim() || new Date().toISOString().split('T')[0],
@@ -587,9 +642,10 @@ export class PocketBaseStorage implements IStorage {
       createdAt: item.created ? new Date(item.created) : new Date(),
     }));
     
-    console.log(`[getAllTransactions] Registros finales mapeados: ${mapped.length}`);
+    const totalDuration = Date.now() - internalStartTime;
+    console.log(`✅ [getAllTransactions] Mapeo completado: ${mapped.length} registros finales en ${totalDuration}ms`);
     if (mapped.length > 0) {
-      console.log(`[getAllTransactions] Ejemplo de primer registro mapeado:`, JSON.stringify(mapped[0], null, 2));
+      console.log(`📋 [getAllTransactions] Ejemplo de primer registro mapeado:`, JSON.stringify(mapped[0], null, 2));
     }
     
     return mapped;
