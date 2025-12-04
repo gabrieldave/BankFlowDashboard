@@ -69,3 +69,4 @@ Una vez configurado, el sistema usará automáticamente PocketBase cuando detect
 - Si necesitas resetear las colecciones, puedes eliminarlas desde el panel de administración de PocketBase
 
 
+

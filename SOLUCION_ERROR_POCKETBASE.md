@@ -69,3 +69,4 @@ Si tu PocketBase está expuesto públicamente, considera:
 - Usar autenticación de usuario en lugar de admin para operaciones normales
 
 
+

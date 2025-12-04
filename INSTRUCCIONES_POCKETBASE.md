@@ -120,3 +120,4 @@ Para cada colección, ve a la pestaña **API Rules** y configura:
 Una vez que las colecciones estén creadas, la aplicación debería funcionar automáticamente. No necesitas ejecutar ningún script adicional - solo crea las colecciones desde el panel web y la aplicación comenzará a usarlas.
 
 
+

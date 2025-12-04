@@ -95,3 +95,4 @@ Si la aplicación está usando `MemStorage`:
 Una vez configuradas las variables de entorno correctamente, las transacciones se guardarán en PocketBase y persistirán entre reinicios.
 
 
+

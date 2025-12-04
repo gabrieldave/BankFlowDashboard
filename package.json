@@ -17,7 +17,10 @@
     "init-pocketbase-sdk": "tsx server/init-pocketbase-sdk.ts",
     "init-users-collection": "tsx server/init-users-collection.ts",
     "diagnostico-pocketbase": "tsx server/diagnostico-pocketbase.ts",
-    "limpiar-datos": "tsx server/limpiar-datos-prueba.ts"
+    "limpiar-datos": "tsx server/limpiar-datos-prueba.ts",
+    "verificar-campos-vacios": "tsx server/verificar-campos-vacios.ts",
+    "verificar-coleccion": "tsx server/verificar-y-corregir-coleccion.ts",
+    "agregar-campos-schema": "tsx server/agregar-campos-schema.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

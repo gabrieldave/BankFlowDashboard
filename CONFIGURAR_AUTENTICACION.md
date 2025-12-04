@@ -154,3 +154,4 @@ Las siguientes rutas son públicas:
 - [ ] Verificar que el favicon se muestre correctamente
 
 
+
