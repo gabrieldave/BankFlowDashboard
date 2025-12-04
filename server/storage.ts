@@ -254,23 +254,58 @@ export class PocketBaseStorage implements IStorage {
     let lastError: any = null;
     let strategySuccess = false;
     
-    // Intentar con diferentes estrategias, con delays para evitar autocancelación
+    // Usar getList con paginación directamente - getFullList puede devolver solo metadata
+    // Intentar con diferentes estrategias de ordenamiento usando getList
     const strategies = [
-      { name: '-id', fn: () => this.pb.collection('transactions').getFullList({ sort: '-id' }) },
-      { name: 'id', fn: () => this.pb.collection('transactions').getFullList({ sort: 'id' }) },
-      { name: 'no sort', fn: () => this.pb.collection('transactions').getFullList() },
-      { name: '-created', fn: () => this.pb.collection('transactions').getFullList({ sort: '-created' }) },
+      { name: '-id', sort: '-id' },
+      { name: 'id', sort: 'id' },
+      { name: '-created', sort: '-created' },
+      { name: 'no sort', sort: '' },
     ];
 
     for (const strategy of strategies) {
       try {
         await wait(100); // Pequeño delay para evitar autocancelación
-        records = await strategy.fn();
+        records = [];
+        let page = 1;
+        let hasMore = true;
+        let consecutiveErrors = 0;
+        const maxConsecutiveErrors = 3;
+
+        while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
+          try {
+            await wait(50); // Delay entre páginas
+            const result = await this.pb.collection('transactions').getList(page, 500, {
+              sort: strategy.sort || undefined,
+            });
+            
+            if (result.items && result.items.length > 0) {
+              records.push(...result.items);
+              hasMore = result.items.length === 500;
+              page++;
+              consecutiveErrors = 0;
+            } else {
+              hasMore = false;
+            }
+          } catch (pageError: any) {
+            consecutiveErrors++;
+            if (isAutoCancelledError(pageError)) {
+              console.warn(`Página ${page} autocancelada con estrategia "${strategy.name}", reintentando...`);
+              await wait(200);
+              continue;
+            }
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+              throw pageError; // Lanzar error para que se intente la siguiente estrategia
+            }
+            await wait(100);
+          }
+        }
+
         if (records && records.length > 0) {
           console.log(`✓ Estrategia "${strategy.name}" exitosa: ${records.length} registros obtenidos`);
           strategySuccess = true;
           break; // Éxito, salir del loop
-        } else if (records && records.length === 0) {
+        } else {
           console.log(`⚠ Estrategia "${strategy.name}" devolvió 0 registros, intentando siguiente...`);
           // Continuar con la siguiente estrategia si devuelve 0 registros
           continue;
@@ -287,55 +322,9 @@ export class PocketBaseStorage implements IStorage {
       }
     }
 
-    // Si todas las estrategias fallaron o devolvieron 0 registros, intentar con paginación
+    // Si todas las estrategias fallaron
     if (!strategySuccess || records.length === 0) {
-      console.log("Intentando obtener transacciones con paginación...");
-      records = [];
-      let page = 1;
-      let hasMore = true;
-      let consecutiveErrors = 0;
-      const maxConsecutiveErrors = 3;
-      let totalFetched = 0;
-
-      while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
-        try {
-          await wait(150); // Delay entre páginas
-          const result = await this.pb.collection('transactions').getList(page, 500, {
-            sort: '-id', // Intentar con ordenamiento por id
-          });
-          
-          if (result.items && result.items.length > 0) {
-            records.push(...result.items);
-            totalFetched += result.items.length;
-            console.log(`✓ Página ${page}: ${result.items.length} registros obtenidos (total: ${totalFetched})`);
-            hasMore = result.items.length === 500;
-            page++;
-            consecutiveErrors = 0; // Reset contador de errores
-          } else {
-            console.log(`Página ${page}: 0 registros, finalizando paginación`);
-            hasMore = false;
-          }
-        } catch (pageError: any) {
-          consecutiveErrors++;
-          if (isAutoCancelledError(pageError)) {
-            console.warn(`Página ${page} autocancelada, reintentando...`);
-            await wait(300); // Esperar más tiempo antes de reintentar
-            continue; // Reintentar la misma página
-          }
-          console.error(`Error fetching page ${page}:`, pageError.message);
-          if (consecutiveErrors >= maxConsecutiveErrors) {
-            console.error("Demasiados errores consecutivos, deteniendo paginación");
-            break;
-          }
-          await wait(200);
-        }
-      }
-      
-      if (records.length > 0) {
-        console.log(`✓ Paginación exitosa: ${records.length} registros obtenidos en total`);
-      } else {
-        console.warn(`⚠ No se pudieron obtener transacciones. Último error: ${lastError?.message || 'N/A'}`);
-      }
+      console.warn(`⚠ No se pudieron obtener transacciones después de intentar todas las estrategias. Último error: ${lastError?.message || 'N/A'}`);
     }
     
     // Log para diagnóstico
