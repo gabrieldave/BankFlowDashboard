@@ -293,13 +293,35 @@ export class PocketBaseStorage implements IStorage {
                 const expandedItems = await Promise.all(
                   result.items.map(async (item: any, idx: number) => {
                     try {
+                      // Intentar obtener con campos específicos usando la API REST directamente
+                      const apiUrl = process.env.POCKETBASE_URL?.replace(/\/_\/$/, '') || process.env.POCKETBASE_URL || '';
+                      const token = this.pb.authStore.token;
+                      
+                      if (apiUrl && token) {
+                        const response = await fetch(`${apiUrl}/api/collections/transactions/records/${item.id}`, {
+                          headers: {
+                            'Authorization': `Bearer ${token}`,
+                          },
+                        });
+                        
+                        if (response.ok) {
+                          const fullRecord = await response.json();
+                          if (idx === 0) {
+                            console.log(`[getAllTransactions] Primer registro expandido (API REST):`, JSON.stringify(fullRecord));
+                          }
+                          return fullRecord;
+                        }
+                      }
+                      
+                      // Fallback al método SDK
                       const fullRecord = await this.pb.collection('transactions').getOne(item.id);
                       if (idx === 0) {
-                        console.log(`[getAllTransactions] Primer registro expandido:`, JSON.stringify(fullRecord));
+                        console.log(`[getAllTransactions] Primer registro expandido (SDK):`, JSON.stringify(fullRecord));
                       }
                       return fullRecord;
                     } catch (e: any) {
                       console.warn(`[getAllTransactions] Error obteniendo registro ${item.id}:`, e.message);
+                      console.warn(`[getAllTransactions] Stack:`, e.stack);
                       return item; // Devolver el item original si falla
                     }
                   })
@@ -465,10 +487,23 @@ export class PocketBaseStorage implements IStorage {
       // Si falla, empezamos desde 1
     }
 
-    const data = await this.pb.collection('transactions').create({
-      ...transaction,
+    const dataToSave = {
+      date: transaction.date,
+      description: transaction.description,
+      amount: transaction.amount,
+      type: transaction.type,
+      category: transaction.category || 'General',
+      merchant: transaction.merchant || '',
+      currency: transaction.currency || 'MXN',
+      bank: (transaction as any).bank || '',
       id_number: nextId,
-    });
+    };
+    
+    console.log(`[createTransaction] Guardando transacción:`, JSON.stringify(dataToSave, null, 2));
+    
+    const data = await this.pb.collection('transactions').create(dataToSave);
+    
+    console.log(`[createTransaction] Transacción guardada, respuesta:`, JSON.stringify(data, null, 2));
     
     return {
       id: data.id_number || this.hashStringToNumber(data.id) || nextId,
@@ -479,6 +514,7 @@ export class PocketBaseStorage implements IStorage {
       category: data.category,
       merchant: data.merchant,
       currency: data.currency || "MXN",
+      bank: (data as any).bank,
       createdAt: data.created ? new Date(data.created) : new Date(),
     };
   }
