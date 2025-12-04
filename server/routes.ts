@@ -5,7 +5,7 @@ import multer from "multer";
 import { parseCSV, parsePDF } from "./file-processors";
 import { insertTransactionSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
-import { detectBank, getSupportedBanksList } from "./bank-detector";
+import { getSupportedBanksList } from "./bank-detector";
 import { extractMetadataFromFilename, extractMetadataFromContent, checkIfFileAlreadyProcessed } from "./file-metadata-extractor";
 
 const upload = multer({
@@ -39,15 +39,8 @@ export async function registerRoutes(
           const fileType = req.file.mimetype;
           const fileName = req.file.originalname;
           
-          // 1. Detectar banco primero (necesario para la verificación)
-          let detectedBank: string | undefined = req.body.bank;
-          if (!detectedBank) {
-            const bankDetection = detectBank(fileName);
-            if (bankDetection.bank && bankDetection.confidence >= 30) {
-              detectedBank = bankDetection.bank.id;
-              console.log(`✓ Banco detectado para verificación: ${bankDetection.bank.name}`);
-            }
-          }
+          // 1. Obtener banco del body (obligatorio, sin detección automática)
+          const detectedBank: string | undefined = req.body.bank;
           
           // 2. Extraer mes y año del nombre del archivo
           let metadata = extractMetadataFromFilename(fileName);
@@ -85,13 +78,16 @@ export async function registerRoutes(
                                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
               const monthName = monthNames[metadata.month - 1] || `Mes ${metadata.month}`;
               shouldSkipProcessing = true;
-              skipReason = `Este archivo ya fue procesado anteriormente. El estado de cuenta de ${monthName} ${metadata.year} para este banco ya existe en el sistema.`;
+              skipReason = `Este archivo ya fue procesado anteriormente. El estado de cuenta de ${monthName} ${metadata.year} para el banco "${detectedBank}" ya existe en el sistema.`;
               console.log(`❌ DUPLICADO DETECTADO: ${skipReason}`);
             } else {
               console.log(`✓ No es duplicado: mes=${metadata.month}, año=${metadata.year}, banco=${detectedBank}`);
             }
+          } else if (!detectedBank) {
+            // Si no hay banco, no podemos verificar duplicados pero continuamos
+            console.log(`⚠️  Banco no proporcionado, no se puede verificar duplicados antes de procesar`);
           } else {
-            console.log(`⚠️  No se pudo verificar completamente: mes=${metadata.month}, año=${metadata.year}, banco=${detectedBank}`);
+            console.log(`⚠️  No se pudo extraer mes/año del archivo para verificación de duplicados`);
             // Continuar con procesamiento normal si no podemos verificar
           }
         }
@@ -112,53 +108,17 @@ export async function registerRoutes(
         });
       }
 
-      // Detectar o obtener el banco - OBLIGATORIO
-      let selectedBank: string | undefined = req.body.bank; // Si viene del body (selección manual)
-      let detectedBankInfo = null;
+      // Obtener banco del body - OBLIGATORIO (sin detección automática)
+      const selectedBank: string | undefined = req.body.bank;
       
-      if (!selectedBank) {
-        // Intentar detectar automáticamente
-        console.log("🔍 Detectando banco automáticamente...");
-        try {
-          const fileName = req.file.originalname;
-          let firstPageText: string | undefined;
-          
-          // Para PDFs, intentar extraer texto de la primera página
-          if (fileType === "application/pdf" || fileName.toLowerCase().endsWith('.pdf')) {
-            try {
-              const { extractTextFromPDF } = await import('./pdf-vision-service');
-              const pages = await extractTextFromPDF(req.file.buffer);
-              if (pages.length > 0) {
-                firstPageText = pages[0].text;
-              }
-            } catch (e) {
-              console.warn("No se pudo extraer texto para detección de banco:", e);
-            }
-          }
-          
-          // Llamar a detectBank de forma segura
-          const detection = detectBank(fileName, undefined, firstPageText);
-          if (detection.bank && detection.confidence >= 30) {
-            selectedBank = detection.bank.id;
-            detectedBankInfo = detection.bank;
-            console.log(`✓ Banco detectado: ${detection.bank.name} (confianza: ${detection.confidence.toFixed(1)}%)`);
-          } else {
-            console.log("⚠️  No se pudo detectar el banco automáticamente");
-          }
-        } catch (detectionError: any) {
-          console.error("Error detectando banco:", detectionError);
-          console.log("⚠️  Error en detección automática de banco");
-        }
-      } else {
-        console.log(`✓ Banco seleccionado manualmente: ${selectedBank}`);
-      }
-
       // VALIDACIÓN: El banco es obligatorio
       if (!selectedBank || selectedBank.trim() === '') {
         return res.status(400).json({ 
           error: "El banco es obligatorio. Por favor, selecciona un banco de la lista o escribe el nombre de tu banco si no aparece en la lista." 
         });
       }
+      
+      console.log(`✓ Banco seleccionado: ${selectedBank}`);
 
       let transactions;
       const fileType = req.file.mimetype;
@@ -187,7 +147,13 @@ export async function registerRoutes(
         });
       }
 
-      const validTransactions = transactions.filter(t => {
+      // Asegurar que todas las transacciones tengan el banco asignado
+      const transactionsWithBank = transactions.map(t => ({
+        ...t,
+        bank: t.bank || selectedBank || undefined,
+      }));
+
+      const validTransactions = transactionsWithBank.filter(t => {
         try {
           insertTransactionSchema.parse(t);
           return true;
