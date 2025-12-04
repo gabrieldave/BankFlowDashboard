@@ -53,23 +53,78 @@ export default function UploadPage() {
     }
   };
 
+  // Restaurar estado de carga al montar el componente
+  useEffect(() => {
+    const uploadInProgress = localStorage.getItem('uploadInProgress');
+    const uploadStartTime = localStorage.getItem('uploadStartTime');
+    
+    if (uploadInProgress === 'true' && uploadStartTime) {
+      // Hay un upload en progreso, restaurar el estado
+      setIsUploading(true);
+      uploadStartTimeRef.current = parseInt(uploadStartTime);
+      
+      // Restaurar progreso guardado o calcular estimado
+      const savedProgress = localStorage.getItem('uploadProgress');
+      if (savedProgress) {
+        setUploadProgress(parseInt(savedProgress));
+      } else {
+        const elapsed = Date.now() - parseInt(uploadStartTime);
+        const estimatedProgress = Math.min(95, Math.floor((elapsed / 300000) * 95)); // Estimación basada en tiempo
+        setUploadProgress(estimatedProgress);
+      }
+      setStatusMessage("Procesando archivo... (continuando en segundo plano)");
+      
+      // Mostrar notificación de que sigue cargando
+      toast({
+        title: "Seguimos cargando",
+        description: "Tu archivo se sigue procesando. El progreso continúa en segundo plano.",
+      });
+      
+      // Continuar el progreso visual
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 95) {
+            clearInterval(progressInterval);
+            return prev;
+          }
+          const newProgress = Math.min(prev + 0.5, 95);
+          localStorage.setItem('uploadProgress', newProgress.toString());
+          return newProgress;
+        });
+      }, 500);
+      
+      // Limpiar intervalo cuando el componente se desmonte
+      return () => clearInterval(progressInterval);
+    }
+  }, []);
+
   // Detectar cuando el usuario regresa a la pestaña
   useEffect(() => {
+    let wasHidden = false;
+    
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isUploading) {
+      if (document.visibilityState === 'hidden') {
+        // El usuario se fue a otra pestaña
+        wasHidden = true;
+      } else if (document.visibilityState === 'visible' && wasHidden && isUploading) {
         // El usuario regresó a la pestaña y hay un upload en progreso
-        // Verificar si el upload completó mientras estaba fuera
+        wasHidden = false;
+        
+        // Actualizar el progreso estimado
         const uploadStartTime = uploadStartTimeRef.current;
         if (uploadStartTime) {
           const elapsed = Date.now() - uploadStartTime;
-          // Si han pasado más de 30 segundos, es probable que el upload haya terminado
-          // Mostrar mensaje informativo
-          if (elapsed > 30000) {
-            toast({
-              title: "Procesamiento en curso",
-              description: "Tu archivo se está procesando. Los datos aparecerán en el dashboard cuando termine.",
-            });
-          }
+          const estimatedProgress = Math.min(95, Math.floor((elapsed / 300000) * 95));
+          setUploadProgress(estimatedProgress);
+          
+          // Mostrar mensaje indicando que sigue cargando
+          toast({
+            title: "Seguimos cargando",
+            description: "Tu archivo se sigue procesando. El progreso continúa en segundo plano.",
+          });
+          
+          // Actualizar el mensaje de estado
+          setStatusMessage("Procesando archivo... (continuando en segundo plano)");
         }
       }
     };
@@ -105,13 +160,13 @@ export default function UploadPage() {
     // Simular progreso más realista con mensajes dinámicos
     let messageIndex = 0;
     const messageInterval = setInterval(() => {
-      if (!abortController.signal.aborted) {
+      if (!abortController.signal.aborted && document.visibilityState === 'visible') {
         setStatusMessage(statusMessages[messageIndex % statusMessages.length]);
         messageIndex++;
       }
     }, 2000);
 
-    // Progreso más suave y realista
+    // Progreso más suave y realista - continuar incluso si la pestaña está inactiva
     let progress = 0;
     const progressInterval = setInterval(() => {
       if (!abortController.signal.aborted) {
@@ -119,6 +174,9 @@ export default function UploadPage() {
         const increment = progress < 30 ? 1 : progress < 70 ? 2 : progress < 90 ? 1.5 : 0.5;
         progress = Math.min(progress + increment, 95);
         setUploadProgress(progress);
+        
+        // Guardar progreso en localStorage para persistencia
+        localStorage.setItem('uploadProgress', progress.toString());
       }
     }, 300);
 
@@ -141,6 +199,7 @@ export default function UploadPage() {
       // Limpiar estado de localStorage
       localStorage.removeItem('uploadInProgress');
       localStorage.removeItem('uploadStartTime');
+      localStorage.removeItem('uploadProgress');
       uploadStartTimeRef.current = null;
 
       setTimeout(() => {
@@ -165,6 +224,7 @@ export default function UploadPage() {
       // Limpiar estado de localStorage
       localStorage.removeItem('uploadInProgress');
       localStorage.removeItem('uploadStartTime');
+      localStorage.removeItem('uploadProgress');
       uploadStartTimeRef.current = null;
       
       toast({
