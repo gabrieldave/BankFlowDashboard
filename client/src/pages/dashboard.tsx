@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useDeferredValue } from "react";
 import { 
   ArrowUpRight, 
@@ -74,14 +74,20 @@ export default function Dashboard() {
     queryKey: ['transactions'],
     queryFn: getTransactions,
     retry: 2,
-    staleTime: 30000, // Cache por 30 segundos
+    staleTime: 60000, // Cache por 60 segundos
+    gcTime: 300000, // Mantener en cache por 5 minutos
+    refetchOnMount: true, // Siempre refetch al montar para asegurar datos frescos
+    refetchOnWindowFocus: false, // Evitar refetch al cambiar de ventana
   });
 
   const { data: stats, isLoading: loadingStats, error: statsError } = useQuery({
     queryKey: ['stats'],
     queryFn: getStats,
     retry: 2,
-    staleTime: 30000, // Cache por 30 segundos
+    staleTime: 60000, // Cache por 60 segundos
+    gcTime: 300000, // Mantener en cache por 5 minutos
+    refetchOnMount: true, // Siempre refetch al montar para asegurar datos frescos
+    refetchOnWindowFocus: false, // Evitar refetch al cambiar de ventana
   });
 
   // Usar deferred values para evitar bloqueos en el UI
@@ -273,8 +279,10 @@ export default function Dashboard() {
     }
   }, [transactions, deferredSearchQuery, deferredFilterType, deferredFilterCategory, deferredFilterMonth, deferredFilterWeek, deferredFilterBank]);
 
-  // Mostrar estado de carga con skeleton
-  if (loadingTransactions || loadingStats) {
+  // Mostrar estado de carga con skeleton - solo si realmente está cargando y no hay datos
+  const isLoading = (loadingTransactions || loadingStats) && !transactions && !stats;
+  
+  if (isLoading) {
     return (
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -362,17 +370,12 @@ export default function Dashboard() {
     );
   }
 
-  if (!transactions || !stats) {
-    return (
-      <div className="text-center space-y-4 py-12">
-        <h2 className="text-2xl font-heading font-bold">No hay datos disponibles</h2>
-        <p className="text-muted-foreground">Sube tu primer archivo para comenzar a visualizar tus finanzas.</p>
-      </div>
-    );
-  }
-
-  // Si no hay transacciones, mostrar mensaje amigable
-  if (!Array.isArray(transactions) || transactions.length === 0) {
+  // Validar que tenemos datos antes de continuar
+  const hasValidTransactions = Array.isArray(transactions) && transactions.length > 0;
+  const hasValidStats = stats && typeof stats === 'object';
+  
+  // Si no hay datos válidos después de cargar, mostrar mensaje
+  if (!loadingTransactions && !loadingStats && !hasValidTransactions) {
     return (
       <div className="text-center space-y-4 py-12">
         <h2 className="text-2xl font-heading font-bold">No hay transacciones</h2>
@@ -385,6 +388,46 @@ export default function Dashboard() {
         </Button>
       </div>
     );
+  }
+  
+  // Si aún está cargando, mostrar skeleton
+  if ((loadingTransactions || loadingStats) && !hasValidTransactions) {
+    return (
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4 rounded" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-32 mb-1" />
+                <Skeleton className="h-4 w-40" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center space-y-2">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+            <p className="text-sm text-muted-foreground">Cargando datos financieros...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Si no hay transacciones válidas, no continuar renderizando
+  if (!hasValidTransactions) {
+    return null;
   }
 
   // Obtener la moneda más común de las transacciones, o usar MXN por defecto (optimizado)
@@ -582,9 +625,14 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              {chartData.length === 0 ? (
+              {!stats?.monthlyData || !Array.isArray(stats.monthlyData) || stats.monthlyData.length === 0 || chartData.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                  <p>No hay datos para mostrar en el gráfico</p>
+                  <div className="text-center space-y-2">
+                    <p className="text-sm">No hay datos para mostrar en el gráfico</p>
+                    {loadingStats && (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary mx-auto" />
+                    )}
+                  </div>
                 </div>
               ) : (
               <ResponsiveContainer width="100%" height="100%">
