@@ -29,7 +29,8 @@
     "verificar-version": "tsx server/verificar-version-pocketbase.ts",
     "agregar-campos": "tsx server/agregar-campos-correcto.ts",
     "agregar-campo-bank": "tsx server/agregar-campo-bank.ts",
-    "fix-access-rules": "tsx server/fix-transactions-access-rules.ts"
+    "fix-access-rules": "tsx server/fix-transactions-access-rules.ts",
+    "limpiar-registros-vacios": "tsx server/limpiar-registros-vacios.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
