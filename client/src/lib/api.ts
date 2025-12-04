@@ -40,6 +40,7 @@ export async function uploadFile(file: File, signal?: AbortSignal): Promise<{ me
     method: 'POST',
     body: formData,
     signal, // Pasar el signal para poder cancelar
+    keepalive: true, // Mantener la petición activa aunque la pestaña esté inactiva
   });
 
   if (!response.ok) {

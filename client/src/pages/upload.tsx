@@ -16,6 +16,7 @@ export default function UploadPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Analizando transacciones...");
   const abortControllerRef = useRef<AbortController | null>(null);
+  const uploadStartTimeRef = useRef<number | null>(null);
   
   // Mensajes dinámicos que rotan durante el procesamiento
   const statusMessages = [
@@ -52,14 +53,32 @@ export default function UploadPage() {
     }
   };
 
-  // NO cancelar automáticamente al desmontar - permitir que el procesamiento continúe
-  // El procesamiento continuará en segundo plano y se guardará en la base de datos
+  // Detectar cuando el usuario regresa a la pestaña
   useEffect(() => {
-    return () => {
-      // Solo limpiar intervalos, pero NO cancelar la petición HTTP
-      // Esto permite que el procesamiento continúe aunque el usuario navegue
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isUploading) {
+        // El usuario regresó a la pestaña y hay un upload en progreso
+        // Verificar si el upload completó mientras estaba fuera
+        const uploadStartTime = uploadStartTimeRef.current;
+        if (uploadStartTime) {
+          const elapsed = Date.now() - uploadStartTime;
+          // Si han pasado más de 30 segundos, es probable que el upload haya terminado
+          // Mostrar mensaje informativo
+          if (elapsed > 30000) {
+            toast({
+              title: "Procesamiento en curso",
+              description: "Tu archivo se está procesando. Los datos aparecerán en el dashboard cuando termine.",
+            });
+          }
+        }
+      }
     };
-  }, []);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isUploading, toast]);
 
   const processFile = async (file: File) => {
     // Cancelar cualquier petición anterior solo si el usuario está en la misma página
@@ -72,6 +91,11 @@ export default function UploadPage() {
     setIsUploading(true);
     setUploadProgress(0);
     setStatusMessage("Iniciando procesamiento...");
+    uploadStartTimeRef.current = Date.now();
+
+    // Guardar estado en localStorage para persistencia
+    localStorage.setItem('uploadInProgress', 'true');
+    localStorage.setItem('uploadStartTime', Date.now().toString());
 
     // AbortController - pero NO lo usaremos para cancelar al navegar
     // Solo para cancelar si el usuario sube otro archivo
@@ -113,6 +137,11 @@ export default function UploadPage() {
       cleanup();
       setUploadProgress(100);
       setStatusMessage("¡Procesamiento completado!");
+      
+      // Limpiar estado de localStorage
+      localStorage.removeItem('uploadInProgress');
+      localStorage.removeItem('uploadStartTime');
+      uploadStartTimeRef.current = null;
 
       setTimeout(() => {
         let description = result.message;
@@ -132,6 +161,11 @@ export default function UploadPage() {
       setIsUploading(false);
       setUploadProgress(0);
       setStatusMessage("Error al procesar");
+      
+      // Limpiar estado de localStorage
+      localStorage.removeItem('uploadInProgress');
+      localStorage.removeItem('uploadStartTime');
+      uploadStartTimeRef.current = null;
       
       toast({
         title: "Error",
@@ -256,7 +290,7 @@ export default function UploadPage() {
                   Por favor espera, esto puede tomar unos minutos...
                 </p>
                 <p className="text-xs text-blue-600 text-center mt-1 font-medium">
-                  💡 Puedes navegar a otras páginas, el procesamiento continuará en segundo plano
+                  💡 Puedes cambiar de pestaña o navegar, el procesamiento continuará en segundo plano
                 </p>
               </div>
 
