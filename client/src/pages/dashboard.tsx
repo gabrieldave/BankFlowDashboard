@@ -317,29 +317,45 @@ export default function Dashboard() {
   };
   const availableMonths = getAvailableMonths();
 
-  // Obtener semanas únicas (mejorado - incluye todas las semanas)
+  // Obtener semanas únicas (lunes a domingo - con rango visual)
   const getAvailableWeeks = () => {
     if (transactionsLength === 0) return [];
     try {
-      const weekMap = new Map<string, { key: string; label: string; date: Date }>();
+      const weekMap = new Map<string, { key: string; label: string; range: string; date: Date }>();
       transactionsArray.forEach(t => {
         try {
           if (!t?.date) return;
           const date = new Date(t.date + 'T00:00:00'); // Asegurar zona horaria
           if (isNaN(date.getTime())) return;
           
-          // Calcular inicio de semana (domingo = 0)
+          // Calcular inicio de semana (lunes = 1)
           const weekStart = new Date(date);
-          const dayOfWeek = date.getDay(); // 0 = Domingo, 6 = Sábado
-          weekStart.setDate(date.getDate() - dayOfWeek);
+          const dayOfWeek = date.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+          // Ajustar para que la semana inicie en lunes
+          // Si es domingo (0), retroceder 6 días al lunes anterior
+          // Si es lunes (1), está en el inicio (restar 0)
+          // Si es otro día, restar (dayOfWeek - 1)
+          const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          weekStart.setDate(date.getDate() - daysToSubtract);
           weekStart.setHours(0, 0, 0, 0);
           
-          // Crear key única para la semana: YYYY-MM-DD (fecha del domingo)
+          // Calcular fin de semana (domingo)
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6);
+          
+          // Crear key única para la semana: YYYY-MM-DD (fecha del lunes)
           const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
           
           if (!weekMap.has(weekKey)) {
-            const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-            weekMap.set(weekKey, { key: weekKey, label: weekLabel, date: new Date(weekStart) });
+            const startLabel = weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+            const endLabel = weekEnd.toLocaleDateString('es-ES', { 
+              day: 'numeric', 
+              month: 'short',
+              ...(weekStart.getFullYear() !== weekEnd.getFullYear() ? { year: 'numeric' } : {})
+            });
+            const weekLabel = `Semana del ${startLabel} al ${endLabel}`;
+            const weekRange = `${weekStart.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} - ${weekEnd.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })}`;
+            weekMap.set(weekKey, { key: weekKey, label: weekLabel, range: weekRange, date: new Date(weekStart) });
           }
         } catch {
           // Ignorar errores
@@ -349,7 +365,7 @@ export default function Dashboard() {
       // Ordenar por fecha (más recientes primero)
       return Array.from(weekMap.values())
         .sort((a, b) => b.date.getTime() - a.date.getTime())
-        .map(({ key, label }) => ({ key, label }));
+        .map(({ key, label, range }) => ({ key, label, range }));
     } catch {
       return [];
     }
@@ -400,13 +416,15 @@ export default function Dashboard() {
       if (deferredFilterWeek !== 'all') {
         filtered = filtered.filter(t => {
           try {
-            const date = new Date(t.date);
+            const date = new Date(t.date + 'T00:00:00');
             if (isNaN(date.getTime())) return false;
             
-            // Calcular inicio de semana (domingo)
+            // Calcular inicio de semana (lunes)
             const weekStart = new Date(date);
             const dayOfWeek = date.getDay();
-            weekStart.setDate(date.getDate() - dayOfWeek);
+            // Ajustar para que la semana inicie en lunes
+            const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+            weekStart.setDate(date.getDate() - daysToSubtract);
             weekStart.setHours(0, 0, 0, 0);
             
             // Crear key igual que en getAvailableWeeks
@@ -973,13 +991,18 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
             <Select value={filterWeek} onValueChange={setFilterWeek}>
-              <SelectTrigger className="h-9 w-[160px] bg-gray-50 border-gray-200">
+              <SelectTrigger className="h-9 w-[180px] bg-gray-50 border-gray-200">
                 <SelectValue placeholder="Semana" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas las semanas</SelectItem>
                 {availableWeeks.map(week => (
-                  <SelectItem key={week.key} value={week.key}>{week.label}</SelectItem>
+                  <SelectItem key={week.key} value={week.key}>
+                    <div className="flex flex-col py-1">
+                      <span className="font-medium">{week.label}</span>
+                      <span className="text-xs text-muted-foreground">({week.range})</span>
+                    </div>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
