@@ -33,16 +33,73 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
-      <Card className="w-full max-w-md shadow-xl border-0">
-        <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-primary/20">
-            <span className="text-white font-heading font-bold text-2xl">F</span>
+      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-8 items-center">
+        {/* Sección de Branding e Introducción */}
+        <div className="hidden md:block space-y-6 text-center md:text-left">
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 justify-center md:justify-start">
+              <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/30 transform hover:scale-105 transition-transform">
+                <span className="text-white font-heading font-black text-4xl">F</span>
+              </div>
+              <h1 className="text-6xl font-heading font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                FinTrack
+              </h1>
+            </div>
+            <p className="text-2xl font-semibold text-gray-800 leading-tight">
+              Controla tus finanzas con inteligencia
+            </p>
           </div>
-          <CardTitle className="text-3xl font-heading font-bold">Bienvenido</CardTitle>
-          <CardDescription className="text-base">
-            Inicia sesión en tu cuenta para continuar
-          </CardDescription>
-        </CardHeader>
+          
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <div className="space-y-3">
+              <h2 className="text-xl font-bold text-gray-900">¿Qué es FinTrack?</h2>
+              <p className="text-gray-700 leading-relaxed">
+                FinTrack es tu asistente financiero inteligente que transforma tus estados de cuenta bancarios en insights accionables. 
+                Analiza automáticamente tus transacciones, categoriza tus gastos y te ayuda a tomar decisiones financieras más informadas.
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-900">✨ Funcionalidades principales:</h3>
+              <ul className="space-y-2 text-gray-700">
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">•</span>
+                  <span><strong>Análisis automático:</strong> Sube tus estados de cuenta CSV o PDF y obtén análisis instantáneos</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">•</span>
+                  <span><strong>Visualizaciones inteligentes:</strong> Gráficos y métricas que te muestran exactamente dónde va tu dinero</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">•</span>
+                  <span><strong>Filtros avanzados:</strong> Analiza por mes, semana, categoría, banco y más</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">•</span>
+                  <span><strong>Insights personalizados:</strong> Descubre patrones de gasto y oportunidades de ahorro</span>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="pt-4">
+              <p className="text-sm text-gray-600 italic">
+                "Toma el control de tus finanzas personales con la herramienta más completa y fácil de usar"
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Formulario de Login */}
+        <Card className="w-full max-w-md shadow-xl border-0 mx-auto">
+          <CardHeader className="space-y-1 text-center">
+            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
+              <span className="text-white font-heading font-bold text-2xl">F</span>
+            </div>
+            <CardTitle className="text-3xl font-heading font-bold">Bienvenido</CardTitle>
+            <CardDescription className="text-base">
+              Inicia sesión en tu cuenta para continuar
+            </CardDescription>
+          </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -130,6 +187,24 @@ export default function Login() {
           </form>
         </CardContent>
       </Card>
+      
+      {/* Versión móvil de la introducción */}
+      <div className="md:hidden mt-8 space-y-4 text-center">
+        <div className="flex items-center justify-center gap-3">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <span className="text-white font-heading font-black text-3xl">F</span>
+          </div>
+          <h1 className="text-4xl font-heading font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            FinTrack
+          </h1>
+        </div>
+        <p className="text-lg font-semibold text-gray-800">
+          Controla tus finanzas con inteligencia
+        </p>
+        <p className="text-sm text-gray-600 px-4">
+          Analiza automáticamente tus estados de cuenta, categoriza tus gastos y toma decisiones financieras más informadas.
+        </p>
+      </div>
     </div>
   );
 }
