@@ -381,8 +381,7 @@ export default function Dashboard() {
     );
   }
 
-  // Validar que tenemos datos antes de continuar
-  const hasValidTransactions = Array.isArray(transactions) && transactions.length > 0;
+  // Validar stats también
   const hasValidStats = stats && typeof stats === 'object';
   
   // Si no hay datos válidos después de cargar, mostrar mensaje
