@@ -377,12 +377,12 @@ export default function UploadPage() {
                       <Building2 className="w-4 h-4" />
                       Banco (opcional - se detectará automáticamente si no seleccionas)
                     </label>
-                    <Select value={selectedBank} onValueChange={setSelectedBank}>
+                    <Select value={selectedBank || "auto"} onValueChange={(value) => setSelectedBank(value === "auto" ? "" : value)}>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Selecciona un banco o déjalo en blanco para detección automática" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Detección automática</SelectItem>
+                        <SelectItem value="auto">Detección automática</SelectItem>
                         {banks.map((bank) => (
                           <SelectItem key={bank.id} value={bank.id}>
                             {bank.name} {bank.country && `(${bank.country})`}
