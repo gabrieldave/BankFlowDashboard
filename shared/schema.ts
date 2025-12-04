@@ -26,6 +26,7 @@ export const transactions = pgTable("transactions", {
   category: text("category").notNull(),
   merchant: text("merchant").notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default("MXN"),
+  bank: varchar("bank", { length: 50 }), // Campo opcional para el banco
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

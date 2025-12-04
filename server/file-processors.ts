@@ -2,7 +2,7 @@ import type { InsertTransaction } from "@shared/schema";
 import { classifyTransactionsBatch } from "./ai-service";
 import { detectCurrencyFromText } from "./currency-detector";
 
-export async function parseCSV(content: string): Promise<InsertTransaction[]> {
+export async function parseCSV(content: string, bank?: string): Promise<InsertTransaction[]> {
   const lines = content.trim().split('\n');
   const rawTransactions: Array<{ date: string; description: string; amount: number }> = [];
   
@@ -52,13 +52,14 @@ export async function parseCSV(content: string): Promise<InsertTransaction[]> {
       category: classification.category,
       merchant: classification.merchant,
       currency: detectedCurrency,
+      bank: bank || undefined,
     };
   });
   
   return transactions;
 }
 
-export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
+export async function parsePDF(buffer: Buffer, bank?: string): Promise<InsertTransaction[]> {
   // SIEMPRE usar IA (DeepSeek Vision) para parsing - NO usar método tradicional
   const DEEPSEEK_API_KEY = (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY) || '';
   
@@ -71,7 +72,7 @@ export async function parsePDF(buffer: Buffer): Promise<InsertTransaction[]> {
   try {
     console.log('Procesando PDF con DeepSeek Vision API (IA)...');
     const { parsePDFWithVision } = await import('./pdf-vision-service');
-    const result = await parsePDFWithVision(buffer);
+    const result = await parsePDFWithVision(buffer, bank);
     console.log(`[PDF Parser] IA exitosa, ${result.length} transacciones extraídas`);
     return result;
   } catch (visionError: any) {

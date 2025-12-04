@@ -246,7 +246,7 @@ IMPORTANTE:
  * Procesa un PDF usando DeepSeek API
  * Extrae texto directamente del PDF y lo envía a la IA (más eficiente que imágenes)
  */
-export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransaction[]> {
+export async function parsePDFWithVision(buffer: Buffer, bank?: string): Promise<InsertTransaction[]> {
   const DEEPSEEK_API_KEY = getDeepSeekApiKey();
   if (!DEEPSEEK_API_KEY) {
     throw new Error('DEEPSEEK_API_KEY no configurada. No se puede usar IA.');
@@ -338,6 +338,7 @@ export async function parsePDFWithVision(buffer: Buffer): Promise<InsertTransact
         category: 'General', // Se clasificará después con IA
         merchant: description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
         currency: detectedCurrency,
+        bank: bank || undefined,
       };
     }).filter((t): t is InsertTransaction => t !== null);
 

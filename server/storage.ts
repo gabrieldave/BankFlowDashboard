@@ -398,6 +398,7 @@ export class PocketBaseStorage implements IStorage {
       category: String(item.category || 'Sin categoría').trim(),
       merchant: String(item.merchant || '').trim(),
       currency: String(item.currency || 'MXN').trim().toUpperCase(),
+      bank: item.bank ? String(item.bank).trim() : undefined,
       createdAt: item.created ? new Date(item.created) : new Date(),
     }));
     
@@ -500,12 +501,14 @@ export class PocketBaseStorage implements IStorage {
       const description = (t.description ? String(t.description).trim() : '').toLowerCase().substring(0, 100);
       const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : (t.amount || 0);
       const type = String(t.type || 'expense').trim();
+      const bank = String((t as any).bank || '').trim().toLowerCase();
       
       return {
         date: date || new Date().toISOString().split('T')[0],
         description: description || 'sin descripción',
         amount: Math.abs(amount || 0).toFixed(2), // Normalizar monto (sin signo, 2 decimales)
         type: type || 'expense',
+        bank: bank || '',
       };
     };
 
@@ -513,7 +516,7 @@ export class PocketBaseStorage implements IStorage {
     const existingSet = new Set(
       existingTransactions.map(t => {
         const normalized = normalizeTransaction(t);
-        return `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+        return `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}|${normalized.bank}`;
       })
     );
 
@@ -523,7 +526,7 @@ export class PocketBaseStorage implements IStorage {
 
     for (const transaction of transactionsToInsert) {
       const normalized = normalizeTransaction(transaction);
-      const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+      const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}|${normalized.bank}`;
       
       if (existingSet.has(key)) {
         duplicates++;

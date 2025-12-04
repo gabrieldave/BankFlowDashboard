@@ -10,7 +10,9 @@ import {
   Download,
   Loader2,
   Info,
-  X
+  X,
+  Calendar,
+  CalendarDays
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -62,6 +64,9 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterMonth, setFilterMonth] = useState<string>('all');
+  const [filterWeek, setFilterWeek] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'all' | 'monthly' | 'weekly'>('all');
   
   const { data: transactions, isLoading: loadingTransactions } = useQuery({
     queryKey: ['transactions'],
@@ -80,6 +85,50 @@ export default function Dashboard() {
     return Array.from(categories).sort();
   }, [transactions]);
 
+  // Obtener meses únicos disponibles en las transacciones
+  const availableMonths = useMemo(() => {
+    if (!transactions) return [];
+    const monthSet = new Set<string>();
+    transactions.forEach(t => {
+      try {
+        const date = new Date(t.date);
+        if (!isNaN(date.getTime())) {
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          const monthLabel = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+          monthSet.add(JSON.stringify({ key: monthKey, label: monthLabel }));
+        }
+      } catch (e) {
+        // Ignorar fechas inválidas
+      }
+    });
+    return Array.from(monthSet)
+      .map(m => JSON.parse(m))
+      .sort((a, b) => b.key.localeCompare(a.key));
+  }, [transactions]);
+
+  // Obtener semanas disponibles
+  const availableWeeks = useMemo(() => {
+    if (!transactions) return [];
+    const weekSet = new Set<string>();
+    transactions.forEach(t => {
+      try {
+        const date = new Date(t.date);
+        if (!isNaN(date.getTime())) {
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() - date.getDay()); // Domingo de la semana
+          const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
+          const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+          weekSet.add(JSON.stringify({ key: weekKey, label: weekLabel }));
+        }
+      } catch (e) {
+        // Ignorar fechas inválidas
+      }
+    });
+    return Array.from(weekSet)
+      .map(w => JSON.parse(w))
+      .sort((a, b) => b.key.localeCompare(a.key));
+  }, [transactions]);
+
   // Filtrar y ordenar transacciones
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
@@ -94,6 +143,36 @@ export default function Dashboard() {
     // Filtrar por categoría
     if (filterCategory !== 'all') {
       filtered = filtered.filter(t => t.category === filterCategory);
+    }
+    
+    // Filtrar por mes
+    if (filterMonth !== 'all') {
+      filtered = filtered.filter(t => {
+        try {
+          const date = new Date(t.date);
+          if (isNaN(date.getTime())) return false;
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          return monthKey === filterMonth;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
+    
+    // Filtrar por semana
+    if (filterWeek !== 'all') {
+      filtered = filtered.filter(t => {
+        try {
+          const date = new Date(t.date);
+          if (isNaN(date.getTime())) return false;
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() - date.getDay());
+          const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
+          return weekKey === filterWeek;
+        } catch (e) {
+          return false;
+        }
+      });
     }
     
     // Aplicar búsqueda
@@ -115,7 +194,7 @@ export default function Dashboard() {
     });
     
     return filtered;
-  }, [transactions, searchQuery, filterType, filterCategory]);
+  }, [transactions, searchQuery, filterType, filterCategory, filterMonth, filterWeek]);
 
   if (loadingTransactions || loadingStats) {
     return (
@@ -163,6 +242,11 @@ export default function Dashboard() {
           <h1 className="text-3xl font-heading font-bold text-gray-900" data-testid="text-dashboard-title">Panel Financiero</h1>
           <p className="text-muted-foreground">
             Resumen de tus finanzas basado en {transactions.length} {transactions.length === 1 ? 'transacción' : 'transacciones'}.
+            {availableMonths.length > 0 && (
+              <span className="ml-2 text-xs">
+                Datos desde {availableMonths[availableMonths.length - 1]?.label} hasta {availableMonths[0]?.label}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
@@ -233,13 +317,53 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-none shadow-sm">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="font-heading text-lg">Evolución del Balance</CardTitle>
+            <div className="flex gap-2">
+              <Button
+                variant={viewMode === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('all')}
+                className="h-8 text-xs"
+              >
+                Mensual
+              </Button>
+              <Button
+                variant={viewMode === 'monthly' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('monthly')}
+                className="h-8 text-xs"
+              >
+                Acumulado
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats.monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart 
+                  data={useMemo(() => {
+                    if (viewMode === 'monthly' && stats.monthlyData.length > 0) {
+                      // Calcular acumulación mes a mes
+                      let cumulativeBalance = 0;
+                      return stats.monthlyData.map((month, idx) => {
+                        cumulativeBalance += (month.income || 0) - (month.expense || 0);
+                        return {
+                          ...month,
+                          cumulativeBalance: parseFloat(cumulativeBalance.toFixed(2)),
+                          cumulativeIncome: idx === 0 
+                            ? month.income 
+                            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.income || 0), 0),
+                          cumulativeExpense: idx === 0 
+                            ? month.expense 
+                            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.expense || 0), 0),
+                        };
+                      });
+                    }
+                    return stats.monthlyData;
+                  }, [stats.monthlyData, viewMode])} 
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
                   <defs>
                     <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.3}/>
@@ -248,6 +372,10 @@ export default function Dashboard() {
                     <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(0 84.2% 60.2%)" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="hsl(0 84.2% 60.2%)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(221 83% 53%)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(221 83% 53%)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
@@ -270,26 +398,74 @@ export default function Dashboard() {
                       border: '1px solid #e5e7eb',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
                     }}
+                    formatter={(value: any, name: string) => {
+                      if (viewMode === 'monthly') {
+                        if (name === 'Balance Acumulado') {
+                          return [formatCurrency(value, defaultCurrency), name];
+                        }
+                        if (name === 'Ingresos Acumulados') {
+                          return [formatCurrency(value, defaultCurrency), name];
+                        }
+                        if (name === 'Gastos Acumulados') {
+                          return [formatCurrency(value, defaultCurrency), name];
+                        }
+                      }
+                      return [formatCurrency(value, defaultCurrency), name];
+                    }}
                   />
                   <Legend />
-                  <Area 
-                    type="monotone" 
-                    dataKey="income" 
-                    stroke="hsl(142 76% 36%)" 
-                    strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorIncome)"
-                    name="Ingresos"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="expense" 
-                    stroke="hsl(0 84.2% 60.2%)" 
-                    strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorExpense)"
-                    name="Gastos"
-                  />
+                  {viewMode === 'monthly' ? (
+                    <>
+                      <Area 
+                        type="monotone" 
+                        dataKey="cumulativeBalance" 
+                        stroke="hsl(221 83% 53%)" 
+                        strokeWidth={2}
+                        fillOpacity={1} 
+                        fill="url(#colorBalance)"
+                        name="Balance Acumulado"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="cumulativeIncome" 
+                        stroke="hsl(142 76% 36%)" 
+                        strokeWidth={2}
+                        fillOpacity={0.2} 
+                        fill="url(#colorIncome)"
+                        name="Ingresos Acumulados"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="cumulativeExpense" 
+                        stroke="hsl(0 84.2% 60.2%)" 
+                        strokeWidth={2}
+                        fillOpacity={0.2} 
+                        fill="url(#colorExpense)"
+                        name="Gastos Acumulados"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Area 
+                        type="monotone" 
+                        dataKey="income" 
+                        stroke="hsl(142 76% 36%)" 
+                        strokeWidth={2}
+                        fillOpacity={1} 
+                        fill="url(#colorIncome)"
+                        name="Ingresos"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="expense" 
+                        stroke="hsl(0 84.2% 60.2%)" 
+                        strokeWidth={2}
+                        fillOpacity={1} 
+                        fill="url(#colorExpense)"
+                        name="Gastos"
+                      />
+                    </>
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -377,7 +553,29 @@ export default function Dashboard() {
                 ))}
               </SelectContent>
             </Select>
-            {(filterType !== 'all' || filterCategory !== 'all' || searchQuery) && (
+            <Select value={filterMonth} onValueChange={setFilterMonth}>
+              <SelectTrigger className="h-9 w-[160px] bg-gray-50 border-gray-200">
+                <SelectValue placeholder="Mes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los meses</SelectItem>
+                {availableMonths.map(month => (
+                  <SelectItem key={month.key} value={month.key}>{month.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterWeek} onValueChange={setFilterWeek}>
+              <SelectTrigger className="h-9 w-[160px] bg-gray-50 border-gray-200">
+                <SelectValue placeholder="Semana" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las semanas</SelectItem>
+                {availableWeeks.map(week => (
+                  <SelectItem key={week.key} value={week.key}>{week.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(filterType !== 'all' || filterCategory !== 'all' || filterMonth !== 'all' || filterWeek !== 'all' || searchQuery) && (
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -385,6 +583,8 @@ export default function Dashboard() {
                 onClick={() => {
                   setFilterType('all');
                   setFilterCategory('all');
+                  setFilterMonth('all');
+                  setFilterWeek('all');
                   setSearchQuery('');
                 }}
               >

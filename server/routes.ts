@@ -5,6 +5,8 @@ import multer from "multer";
 import { parseCSV, parsePDF } from "./file-processors";
 import { insertTransactionSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { detectBank, getSupportedBanksList } from "./bank-detector";
+import { extractMetadataFromFilename, extractMetadataFromContent, checkIfFileAlreadyProcessed } from "./file-metadata-extractor";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -24,15 +26,136 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No se envió ningún archivo" });
       }
 
+      // OPTIMIZACIÓN CRÍTICA: Verificar duplicados por mes/año/banco ANTES de procesar con IA
+      // Esto ahorra tiempo y costos de API significativamente
+      let shouldSkipProcessing = false;
+      let skipReason = '';
+      
+      try {
+        console.log("🔍 Verificando duplicados por mes/año/banco antes de procesar...");
+        const existingTransactions = await storage.getAllTransactions();
+        
+        if (existingTransactions && existingTransactions.length > 0) {
+          const fileType = req.file.mimetype;
+          const fileName = req.file.originalname;
+          
+          // 1. Detectar banco primero (necesario para la verificación)
+          let detectedBank: string | undefined = req.body.bank;
+          if (!detectedBank) {
+            const bankDetection = detectBank(fileName);
+            if (bankDetection.bank && bankDetection.confidence >= 30) {
+              detectedBank = bankDetection.bank.id;
+              console.log(`✓ Banco detectado para verificación: ${bankDetection.bank.name}`);
+            }
+          }
+          
+          // 2. Extraer mes y año del nombre del archivo
+          let metadata = extractMetadataFromFilename(fileName);
+          console.log(`📅 Metadata del nombre: mes=${metadata.month}, año=${metadata.year}`);
+          
+          // 3. Si no se encontró en el nombre, intentar extraer de la primera página del PDF
+          if ((!metadata.month || !metadata.year) && (fileType === "application/pdf" || fileName.toLowerCase().endsWith('.pdf'))) {
+            try {
+              console.log("📄 Extrayendo texto de la primera página para obtener mes/año...");
+              const { extractTextFromPDF } = await import('./pdf-vision-service');
+              const pages = await extractTextFromPDF(req.file.buffer);
+              if (pages.length > 0 && pages[0].text) {
+                const contentMetadata = extractMetadataFromContent(pages[0].text);
+                if (contentMetadata.month && contentMetadata.year) {
+                  metadata = contentMetadata;
+                  console.log(`✓ Metadata extraída del contenido: mes=${metadata.month}, año=${metadata.year}`);
+                }
+              }
+            } catch (e) {
+              console.warn("No se pudo extraer texto para metadata:", e);
+            }
+          }
+          
+          // 4. Si tenemos mes, año y banco, verificar duplicados
+          if (metadata.month && metadata.year && detectedBank) {
+            const isDuplicate = checkIfFileAlreadyProcessed(
+              existingTransactions,
+              metadata.month,
+              metadata.year,
+              detectedBank
+            );
+            
+            if (isDuplicate) {
+              const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                                 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+              const monthName = monthNames[metadata.month - 1] || `Mes ${metadata.month}`;
+              shouldSkipProcessing = true;
+              skipReason = `Este archivo ya fue procesado anteriormente. El estado de cuenta de ${monthName} ${metadata.year} para este banco ya existe en el sistema.`;
+              console.log(`❌ DUPLICADO DETECTADO: ${skipReason}`);
+            } else {
+              console.log(`✓ No es duplicado: mes=${metadata.month}, año=${metadata.year}, banco=${detectedBank}`);
+            }
+          } else {
+            console.log(`⚠️  No se pudo verificar completamente: mes=${metadata.month}, año=${metadata.year}, banco=${detectedBank}`);
+            // Continuar con procesamiento normal si no podemos verificar
+          }
+        }
+      } catch (error: any) {
+        console.warn("Error en verificación previa de duplicados:", error.message);
+        // Continuar con procesamiento normal si falla la verificación previa
+      }
+      
+      // Si es duplicado, rechazar inmediatamente sin procesar con IA
+      if (shouldSkipProcessing) {
+        return res.json({
+          message: skipReason,
+          count: 0,
+          duplicates: 0,
+          skipped: 0,
+          transactions: [],
+          alreadyProcessed: true,
+        });
+      }
+
+      // Detectar o obtener el banco
+      let selectedBank: string | undefined = req.body.bank; // Si viene del body (selección manual)
+      let detectedBankInfo = null;
+      
+      if (!selectedBank) {
+        // Intentar detectar automáticamente
+        console.log("🔍 Detectando banco automáticamente...");
+        const fileName = req.file.originalname;
+        let firstPageText: string | undefined;
+        
+        // Para PDFs, intentar extraer texto de la primera página
+        if (fileType === "application/pdf" || fileName.toLowerCase().endsWith('.pdf')) {
+          try {
+            const { extractTextFromPDF } = await import('./pdf-vision-service');
+            const pages = await extractTextFromPDF(req.file.buffer);
+            if (pages.length > 0) {
+              firstPageText = pages[0].text;
+            }
+          } catch (e) {
+            console.warn("No se pudo extraer texto para detección de banco:", e);
+          }
+        }
+        
+        const detection = detectBank(fileName, undefined, firstPageText);
+        if (detection.bank && detection.confidence >= 30) {
+          selectedBank = detection.bank.id;
+          detectedBankInfo = detection.bank;
+          console.log(`✓ Banco detectado: ${detection.bank.name} (confianza: ${detection.confidence.toFixed(1)}%)`);
+        } else {
+          console.log("⚠️  No se pudo detectar el banco automáticamente");
+        }
+      } else {
+        console.log(`✓ Banco seleccionado manualmente: ${selectedBank}`);
+      }
+
       let transactions;
       const fileType = req.file.mimetype;
 
       if (fileType === "text/csv" || req.file.originalname.endsWith('.csv')) {
         const content = req.file.buffer.toString('utf-8');
-        transactions = await parseCSV(content);
+        transactions = await parseCSV(content, selectedBank);
       } else if (fileType === "application/pdf" || req.file.originalname.toLowerCase().endsWith('.pdf')) {
         try {
-          transactions = await parsePDF(req.file.buffer);
+          transactions = await parsePDF(req.file.buffer, selectedBank);
         } catch (pdfError: any) {
           console.error("Error específico en PDF:", pdfError);
           return res.status(400).json({ 
@@ -92,6 +215,7 @@ export async function registerRoutes(
               const description = (t?.description ? String(t.description).trim() : '').toLowerCase().substring(0, 100);
               const amount = typeof t?.amount === 'string' ? parseFloat(t.amount) : (t?.amount || 0);
               const type = String(t?.type || 'expense').trim();
+              const bank = String(t?.bank || '').trim().toLowerCase();
               
               if (!date && !description) {
                 return null; // Transacción inválida sin fecha ni descripción
@@ -102,6 +226,7 @@ export async function registerRoutes(
                 description: description || 'sin descripción',
                 amount: Math.abs(amount || 0).toFixed(2),
                 type: type || 'expense',
+                bank: bank || '',
               };
             } catch (error) {
               console.warn("Error normalizando transacción:", error, t);
@@ -114,7 +239,7 @@ export async function registerRoutes(
             .filter(t => t && typeof t === 'object' && (t.date || t.description || t.amount !== undefined))
             .map(t => {
               const normalized = normalizeTransaction(t);
-              return normalized ? `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}` : null;
+              return normalized ? `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}|${normalized.bank}` : null;
             })
             .filter((key): key is string => key !== null && key.length > 0);
           
@@ -136,12 +261,14 @@ export async function registerRoutes(
         const description = (t?.description ? String(t.description).trim() : '').toLowerCase().substring(0, 100);
         const amount = typeof t?.amount === 'string' ? parseFloat(t.amount) : (t?.amount || 0);
         const type = String(t?.type || 'expense').trim();
+        const bank = String(t?.bank || selectedBank || '').trim().toLowerCase();
         
         return {
           date: date || new Date().toISOString().split('T')[0],
           description: description || 'sin descripción',
           amount: Math.abs(amount || 0).toFixed(2),
           type: type || 'expense',
+          bank: bank || '',
         };
       };
 
@@ -151,7 +278,7 @@ export async function registerRoutes(
         for (const transaction of validTransactions) {
           try {
             const normalized = normalizeTransaction(transaction);
-            const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+            const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}|${normalized.bank}`;
             if (existingSet.has(key)) {
               duplicateCount++;
             }
@@ -197,6 +324,17 @@ export async function registerRoutes(
         error: error.message || "Error procesando el archivo",
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
+    }
+  });
+
+  // Endpoint para obtener lista de bancos soportados
+  app.get("/api/banks", async (req, res) => {
+    try {
+      const banks = getSupportedBanksList();
+      res.json(banks);
+    } catch (error: any) {
+      console.error("Error obteniendo bancos:", error);
+      res.status(500).json({ error: "Error obteniendo bancos" });
     }
   });
 

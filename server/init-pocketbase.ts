@@ -232,6 +232,7 @@ async function main() {
         { name: "category", type: "text", required: true },
         { name: "merchant", type: "text", required: true },
         { name: "currency", type: "text", required: true, options: { defaultValue: "MXN" } },
+        { name: "bank", type: "text", required: false }, // Campo opcional para el banco
       ],
       "base"
     );
