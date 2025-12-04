@@ -140,7 +140,7 @@ export default function Analytics() {
         <MetricCard
           title="Gasto Diario Promedio"
           value={formatCurrency(stats.avgDailyExpense || 0, defaultCurrency)}
-          subtitle="últimos 30 días"
+          subtitle="promedio general"
           icon={Clock}
           iconColor="text-red-500"
           explanation={`En promedio, gastas ${formatCurrency(stats.avgDailyExpense || 0, defaultCurrency)} por día. Multiplicado por 30 días, esto representa aproximadamente ${formatCurrency((stats.avgDailyExpense || 0) * 30, defaultCurrency)} mensuales.`}
@@ -149,7 +149,7 @@ export default function Analytics() {
         <MetricCard
           title="Ingreso Diario Promedio"
           value={formatCurrency(stats.avgDailyIncome || 0, defaultCurrency)}
-          subtitle="últimos 30 días"
+          subtitle="promedio general"
           icon={Zap}
           iconColor="text-green-500"
           explanation={`En promedio, recibes ${formatCurrency(stats.avgDailyIncome || 0, defaultCurrency)} por día. Esto te ayuda a proyectar tus ingresos mensuales.`}
@@ -182,7 +182,7 @@ export default function Analytics() {
       {stats.dailyData && stats.dailyData.length > 0 && (
         <Card className="border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="font-heading text-lg">Actividad Diaria (Últimos 30 días)</CardTitle>
+            <CardTitle className="font-heading text-lg">Actividad Diaria</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">

@@ -182,15 +182,15 @@ export async function registerRoutes(
       const expenseTransactions = transactions.filter(t => t.type === 'expense');
       const incomeTransactions = transactions.filter(t => t.type === 'income');
       
-      // Gasto promedio diario (últimos 30 días)
-      const last30Days = dailyData.length;
-      const avgDailyExpense = last30Days > 0 
-        ? dailyData.reduce((acc, d) => acc + d.expense, 0) / last30Days 
+      // Gasto promedio diario (todos los días con datos)
+      const totalDays = dailyData.length;
+      const avgDailyExpense = totalDays > 0 
+        ? dailyData.reduce((acc, d) => acc + d.expense, 0) / totalDays 
         : 0;
       
-      // Ingreso promedio diario (últimos 30 días)
-      const avgDailyIncome = last30Days > 0 
-        ? dailyData.reduce((acc, d) => acc + d.income, 0) / last30Days 
+      // Ingreso promedio diario (todos los días con datos)
+      const avgDailyIncome = totalDays > 0 
+        ? dailyData.reduce((acc, d) => acc + d.income, 0) / totalDays 
         : 0;
       
       // Día de la semana con más gastos
@@ -319,7 +319,7 @@ export async function registerRoutes(
       const transactionsToUpdate = updateAll 
         ? allTransactions  // Actualizar todas
         : allTransactions.filter(t => 
-            !t.currency || t.currency === 'EUR' || t.currency === null || t.currency === undefined || t.currency !== currency
+            !t.currency || t.currency === 'EUR' || t.currency === null || t.currency === undefined
           );
       
       if (transactionsToUpdate.length === 0) {
@@ -397,12 +397,11 @@ function calculateMonthlyData(transactions: any[]) {
 
 function calculateDailyData(transactions: any[]) {
   const dailyTotals: Record<string, { income: number; expense: number }> = {};
-  const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   
+  // Procesar TODAS las transacciones, no solo los últimos 30 días
   transactions.forEach(t => {
     const date = new Date(t.date);
-    if (isNaN(date.getTime()) || date < thirtyDaysAgo) return;
+    if (isNaN(date.getTime())) return;
     
     const dayKey = date.toISOString().split('T')[0];
     

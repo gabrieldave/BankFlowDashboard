@@ -326,7 +326,7 @@ export default function Dashboard() {
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Total Gastos</p>
                   <p className="text-xl font-bold text-foreground">
-                    {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(stats.monthlyExpenses)}
+                    {formatCurrency(stats.monthlyExpenses, defaultCurrency)}
                   </p>
                 </div>
               </div>

@@ -15,8 +15,8 @@
 3. Conecta tu repositorio: `gabrieldave/BankFlowDashboard`
 4. Selecciona la rama: `main`
 5. Configura:
-   - **Build Pack**: `Node.js` o `Dockerfile` (si tienes uno)
-   - **Port**: `5000` (o el que configures en variables de entorno)
+   - **Build Pack**: `Nixpacks` (se detecta automáticamente)
+   - **Is it a static site?**: ❌ NO (desmarcado)
 
 ### 2. Configurar Variables de Entorno
 
@@ -41,17 +41,27 @@ DEEPSEEK_API_KEY=sk-tu-api-key-aqui
 - No quites el `/_/` de la URL
 - No agregues puertos si no los tiene la URL original
 
-### 3. Configurar Build
+### 3. Configurar Build (Nixpacks)
 
 En la sección **"Build"**:
 
-**Opción A: Usando Node.js Build Pack**
-- **Build Command**: `npm run build`
-- **Start Command**: `npm run start`
-- **Node Version**: `18` o superior
+**Con Nixpacks, los siguientes campos pueden quedarse VACÍOS** (Nixpacks los detecta automáticamente):
+- **Install Command**: (vacío)
+- **Build Command**: (vacío)
+- **Start Command**: (vacío)
+- **Base Directory**: `/`
+- **Publish Directory**: `/` (o `/dist/public` si quieres ser específico)
 
-**Opción B: Usando Dockerfile (si lo prefieres)**
-- Coolify detectará automáticamente el Dockerfile si existe
+**⚠️ IMPORTANTE - Configuración de Puertos:**
+
+En la sección **"Network"**:
+- **Ports Exposes**: `5000` (debe coincidir con la variable PORT)
+- **Ports Mappings**: `5000:5000`
+- **Variable de entorno PORT**: `5000` (ya configurada)
+
+**🔴 Error común**: Si ves el warning "PORT mismatch detected", significa que:
+- La variable `PORT` está en `5000` pero "Ports Exposes" está en otro valor (ej: `3000`)
+- **Solución**: Cambia "Ports Exposes" a `5000` para que coincida con `PORT=5000`
 
 ### 4. Configurar Dominio
 
