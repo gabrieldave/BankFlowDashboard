@@ -158,7 +158,7 @@ export default function UploadPage() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isUploading, toast]);
+  }, [isUploading]);
 
   const processFile = async (file: File, bank?: string) => {
     // Cancelar cualquier petición anterior solo si el usuario está en la misma página
