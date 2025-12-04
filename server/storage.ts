@@ -317,13 +317,26 @@ export class PocketBaseStorage implements IStorage {
                           if (response.ok) {
                             const fullRecord = await response.json();
                             if (idx === 0) {
-                              console.log(`[getAllTransactions] Primer registro expandido (API REST):`, JSON.stringify(fullRecord));
+                              console.log(`[getAllTransactions] Primer registro expandido (API REST con fields):`, JSON.stringify(fullRecord));
                             }
                             // Verificar que tiene campos de datos
                             if (fullRecord.date || fullRecord.description || fullRecord.amount !== undefined) {
                               return fullRecord;
                             } else {
-                              console.warn(`[getAllTransactions] API REST también devolvió solo metadata para ${item.id}`);
+                              console.warn(`[getAllTransactions] API REST con fields devolvió solo metadata, intentando sin fields...`);
+                              // Intentar sin fields parameter
+                              const response2 = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}`, {
+                                headers: {
+                                  'Authorization': `Bearer ${token}`,
+                                },
+                              });
+                              if (response2.ok) {
+                                const fullRecord2 = await response2.json();
+                                if (idx === 0) {
+                                  console.log(`[getAllTransactions] Registro sin fields:`, JSON.stringify(fullRecord2));
+                                }
+                                return fullRecord2;
+                              }
                             }
                           }
                         } catch (fetchError: any) {
@@ -332,13 +345,47 @@ export class PocketBaseStorage implements IStorage {
                       }
                       
                       // Fallback al método SDK con fields explícitos
-                      const fullRecord = await this.pb.collection('transactions').getOne(item.id, {
-                        fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
-                      });
-                      if (idx === 0) {
-                        console.log(`[getAllTransactions] Primer registro expandido (SDK):`, JSON.stringify(fullRecord));
+                      try {
+                        const fullRecord = await this.pb.collection('transactions').getOne(item.id, {
+                          fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
+                        });
+                        if (idx === 0) {
+                          console.log(`[getAllTransactions] Primer registro expandido (SDK):`, JSON.stringify(fullRecord));
+                        }
+                        // Si el SDK también devuelve solo metadata, intentar con API REST sin fields
+                        if (!fullRecord.date && !fullRecord.description && fullRecord.amount === undefined) {
+                          console.warn(`[getAllTransactions] SDK también devolvió solo metadata, intentando API REST sin fields...`);
+                          if (apiUrl && token) {
+                            const response2 = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`,
+                              },
+                            });
+                            if (response2.ok) {
+                              const fullRecord2 = await response2.json();
+                              if (idx === 0) {
+                                console.log(`[getAllTransactions] Registro obtenido sin fields:`, JSON.stringify(fullRecord2));
+                              }
+                              return fullRecord2;
+                            }
+                          }
+                        }
+                        return fullRecord;
+                      } catch (sdkError: any) {
+                        console.warn(`[getAllTransactions] Error con SDK getOne:`, sdkError.message);
+                        // Último intento: API REST sin fields
+                        if (apiUrl && token) {
+                          const response3 = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`,
+                            },
+                          });
+                          if (response3.ok) {
+                            return await response3.json();
+                          }
+                        }
+                        throw sdkError;
                       }
-                      return fullRecord;
                     } catch (e: any) {
                       console.warn(`[getAllTransactions] Error obteniendo registro ${item.id}:`, e.message);
                       console.warn(`[getAllTransactions] Stack:`, e.stack);

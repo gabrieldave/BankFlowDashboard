@@ -24,6 +24,8 @@ interface ExtractedTransaction {
   description: string;
   amount: number;
   type: 'income' | 'expense';
+  category?: string;
+  merchant?: string;
 }
 
 /**
@@ -59,27 +61,36 @@ async function extractTextFromPDF(buffer: Buffer): Promise<Array<{ pageNumber: n
     const pdf = await loadingTask.promise;
     const pages: Array<{ pageNumber: number; text: string }> = [];
     
-    console.log(`Extrayendo texto de ${pdf.numPages} páginas del PDF...`);
+    console.log(`Extrayendo texto de ${pdf.numPages} páginas del PDF en paralelo...`);
     
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      
-      // Extraer texto de la página
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ')
-        .trim();
-      
-      pages.push({
-        pageNumber: pageNum,
-        text: pageText
-      });
-      
-      console.log(`Página ${pageNum}/${pdf.numPages} - ${pageText.length} caracteres extraídos`);
-    }
+    // OPTIMIZACIÓN: Extraer todas las páginas en paralelo
+    const pagePromises = Array.from({ length: pdf.numPages }, async (_, i) => {
+      const pageNum = i + 1;
+      try {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ')
+          .trim();
+        
+        console.log(`Página ${pageNum}/${pdf.numPages} - ${pageText.length} caracteres extraídos`);
+        
+        return {
+          pageNumber: pageNum,
+          text: pageText
+        };
+      } catch (error: any) {
+        console.warn(`Error extrayendo página ${pageNum}:`, error.message);
+        return {
+          pageNumber: pageNum,
+          text: ''
+        };
+      }
+    });
     
-    return pages;
+    const pages = await Promise.all(pagePromises);
+    return pages.filter(p => p.text.length > 0);
   } catch (error: any) {
     console.error('Error extrayendo texto del PDF:', error);
     throw new Error(`Error extrayendo texto del PDF: ${error.message}`);
@@ -87,9 +98,9 @@ async function extractTextFromPDF(buffer: Buffer): Promise<Array<{ pageNumber: n
 }
 
 /**
- * Extrae transacciones del texto de una página usando DeepSeek API
+ * Extrae y clasifica transacciones del texto de una página usando DeepSeek API (OPTIMIZADO: extrae y clasifica en una sola llamada)
  */
-async function extractTransactionsFromText(
+async function extractAndClassifyTransactionsFromText(
   pageText: string,
   pageNumber: number,
   totalPages: number
@@ -99,50 +110,40 @@ async function extractTransactionsFromText(
     throw new Error('DEEPSEEK_API_KEY no configurada. No se puede usar visión.');
   }
 
-  const prompt = `Eres un experto en análisis de estados de cuenta bancarios. Analiza este texto extraído de una página de estado de cuenta bancario (página ${pageNumber} de ${totalPages}) y extrae TODAS las transacciones que encuentres.
+  // Prompt optimizado: extraer Y clasificar en una sola llamada
+  const prompt = `Eres un experto en análisis de estados de cuenta bancarios. Analiza este texto y extrae TODAS las transacciones con su categoría y comercio.
 
-TEXTO DE LA PÁGINA:
+TEXTO DE LA PÁGINA (${pageNumber}/${totalPages}):
 ${pageText}
 
-INSTRUCCIONES CRÍTICAS:
+INSTRUCCIONES:
+1. Extrae TODAS las transacciones visibles
+2. Para cada transacción, identifica:
+   - Fecha: Convierte a "YYYY-MM-DD"
+   - Descripción: Completa pero concisa
+   - Monto: Número exacto (sin comas, sin signos en el número)
+   - Tipo: "income" o "expense"
+   - Categoría: Una de: Alimentación, Restaurantes, Transporte, Amazon, MercadoLibre, Compras Online, Salud, Vivienda, Salario, Entretenimiento, Servicios, Transferencias, Tarjetas, Comisiones, General
+   - Comercio: Nombre del comercio o "Desconocido"
 
-INSTRUCCIONES CRÍTICAS:
-1. Busca TODAS las transacciones en la página, incluyendo las que están en tablas, listas o cualquier formato
-2. Para cada transacción, identifica EXACTAMENTE:
-   - Fecha: Convierte formatos como "01/sep/2025" o "01/09/2025" a "2025-09-01" (YYYY-MM-DD)
-   - Descripción: Toma la descripción completa pero sin repetir "Fecha y hora:" múltiples veces. Si dice "Abono - Transferencia recibida", usa eso. Si tiene detalles adicionales, inclúyelos pero de forma concisa.
-   - Monto: EXTRAE EL MONTO EXACTO que aparece en la columna "Monto de transacción". Si dice "- $ 200.00" → amount: -200.00. Si dice "+$ 1,000.00" → amount: 1000.00. NO uses valores por defecto ni valores incorrectos.
-   - Tipo: "income" si tiene signo + o dice "Abono", "expense" si tiene signo - o dice "Cargo"
+3. REGLAS DE EXTRACCIÓN:
+   - Monto: Número exacto del PDF (sin comas, sin signos en el número)
+   - Si dice "+$" o "Abono" → type: "income", amount positivo
+   - Si dice "-$" o "Cargo" → type: "expense", amount positivo (el signo se maneja con type)
 
-3. REGLAS CRÍTICAS DE EXTRACCIÓN:
-   - El monto DEBE ser el número exacto que aparece en el PDF, NO un valor por defecto
-   - Si el monto tiene formato "1,000.00" con comas, conviértelo a 1000.00 (sin comas)
-   - Si el monto tiene signo "+$" o "+ $" → es INGRESO (amount positivo, type: "income")
-   - Si el monto tiene signo "-$" o "- $" → es GASTO (amount negativo, type: "expense")
-   - NO uses el mismo monto para todas las transacciones. Cada una tiene su monto único.
-
-4. Formato de respuesta: Responde SOLO con un JSON array válido, sin texto adicional:
+4. Formato de respuesta (SOLO JSON, sin texto adicional):
 [
   {
     "date": "2025-09-01",
-    "description": "Cargo - Transferencia enviada Transferencia Interbancaria SPEI",
-    "amount": -200.00,
-    "type": "expense"
-  },
-  {
-    "date": "2025-09-02",
-    "description": "Abono - Transferencia recibida MERCADO PAGO",
-    "amount": 1000.00,
-    "type": "income"
+    "description": "Cargo - Transferencia enviada",
+    "amount": 200.00,
+    "type": "expense",
+    "category": "Transferencias",
+    "merchant": "Banco Destino"
   }
 ]
 
-5. Si no encuentras transacciones, devuelve un array vacío: []
-
-IMPORTANTE: 
-- Extrae TODAS las transacciones visibles en la página
-- Cada monto DEBE ser único y correcto según lo que aparece en el PDF
-- NO uses valores por defecto como 9.00 o valores repetidos`;
+5. Si no hay transacciones: []`;
 
   try {
     const response = await fetch(DEEPSEEK_API_URL, {
@@ -152,19 +153,19 @@ IMPORTANTE:
         'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-chat', // DeepSeek soporta visión con este modelo
+        model: 'deepseek-chat',
         messages: [
           {
             role: 'system',
-            content: 'Eres un experto en extracción de datos de estados de cuenta bancarios. Extrae transacciones con precisión absoluta.'
+            content: 'Eres un experto en extracción y clasificación de transacciones bancarias. Responde SOLO con JSON válido.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        temperature: 0.1, // Baja temperatura para mayor precisión
-        max_tokens: 4000, // Más tokens para transacciones largas
+        temperature: 0.1,
+        max_tokens: 6000, // Aumentado para incluir categorías y comercios
       }),
     });
 
@@ -196,34 +197,23 @@ IMPORTANTE:
       return [];
     }
 
-    console.log(`Extraídas ${transactions.length} transacciones de la página ${pageNumber} usando DeepSeek API (texto)`);
-    
-    // Log detallado de las transacciones extraídas
-    transactions.forEach((t: any, idx: number) => {
-      console.log(`  Transacción ${idx + 1}: fecha=${t.date}, desc=${t.description?.substring(0, 50)}, amount=${t.amount}, type=${t.type}`);
-    });
+    console.log(`Extraídas ${transactions.length} transacciones de la página ${pageNumber} (con clasificación)`);
     
     return transactions.map((t: any) => {
-      // Validar y convertir el monto
       let amount: number;
       if (typeof t.amount === 'number') {
-        amount = t.amount;
+        amount = Math.abs(t.amount); // Siempre positivo, el tipo indica si es ingreso o gasto
       } else if (typeof t.amount === 'string') {
-        // Limpiar el string de monto (el guion debe estar al final o escapado en la clase de caracteres)
         const cleanAmount = t.amount.replace(/[^\d.,+-]/g, '').replace(',', '.');
-        amount = parseFloat(cleanAmount);
+        amount = Math.abs(parseFloat(cleanAmount));
         if (isNaN(amount)) {
-          console.warn(`Monto inválido en transacción: "${t.amount}" -> parseado como NaN`);
           return null;
         }
       } else {
-        console.warn(`Tipo de monto inválido: ${typeof t.amount}, valor: ${t.amount}`);
         return null;
       }
       
-      // Validar que el monto no sea 0 o muy pequeño (probablemente error)
-      if (amount === 0 || Math.abs(amount) < 0.01) {
-        console.warn(`Monto muy pequeño o cero en transacción: ${amount}`);
+      if (amount === 0 || amount < 0.01) {
         return null;
       }
       
@@ -232,8 +222,10 @@ IMPORTANTE:
         description: t.description || '',
         amount: amount,
         type: t.type === 'income' ? 'income' : 'expense',
+        category: t.category || 'General',
+        merchant: t.merchant || 'Desconocido',
       };
-    }).filter((t: ExtractedTransaction | null): t is ExtractedTransaction => 
+    }).filter((t: any): t is ExtractedTransaction => 
       t !== null && t.date && t.description && !isNaN(t.amount) && t.amount !== 0
     );
   } catch (error: any) {
@@ -266,36 +258,26 @@ export async function parsePDFWithVision(buffer: Buffer, bank?: string): Promise
       throw new Error('No se pudo extraer texto del PDF');
     }
 
-    // Extraer transacciones de cada página usando IA
-    // Procesar en batches más grandes para ser más eficiente
-    const allTransactions: ExtractedTransaction[] = [];
-    const batchSize = 5; // Procesar 5 páginas a la vez (optimizado)
-
-    for (let i = 0; i < pages.length; i += batchSize) {
-      const batch = pages.slice(i, i + batchSize);
-      console.log(`Procesando páginas ${i + 1}-${Math.min(i + batchSize, pages.length)}/${pages.length} con DeepSeek API...`);
-      
-      // Procesar batch en paralelo
-      const batchPromises = batch.map(page => 
-        extractTransactionsFromText(
-          page.text,
-          page.pageNumber,
-          pages.length
-        )
-      );
-      
-      const batchResults = await Promise.all(batchPromises);
-      
-      // Agregar todas las transacciones del batch
-      batchResults.forEach(pageTransactions => {
-        allTransactions.push(...pageTransactions);
-      });
-      
-      // Pausa mínima entre batches para evitar rate limiting (reducida)
-      if (i + batchSize < pages.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-    }
+    // OPTIMIZACIÓN: Procesar todas las páginas en paralelo (sin batches, sin pausas)
+    console.log(`Procesando ${pages.length} páginas en paralelo con DeepSeek API...`);
+    const startTime = Date.now();
+    
+    const allPromises = pages.map(page => 
+      extractAndClassifyTransactionsFromText(
+        page.text,
+        page.pageNumber,
+        pages.length
+      )
+    );
+    
+    // Procesar todas las páginas simultáneamente
+    const allResults = await Promise.all(allPromises);
+    
+    const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`✓ Procesamiento completado en ${processingTime}s (paralelo)`);
+    
+    // Combinar todas las transacciones
+    const allTransactions = allResults.flat();
 
     console.log(`Total de transacciones extraídas con IA: ${allTransactions.length}`);
 
@@ -313,60 +295,32 @@ export async function parsePDFWithVision(buffer: Buffer, bank?: string): Promise
       console.warn('Error detectando moneda, usando MXN por defecto');
     }
 
-    // Convertir a formato InsertTransaction
-    const transactions: InsertTransaction[] = allTransactions.map((t) => {
-      // Validar el monto antes de guardar
+    // Convertir a formato InsertTransaction (ya incluye categoría y merchant de la IA)
+    const transactions: InsertTransaction[] = allTransactions.map((t: any) => {
       const amount = Math.abs(t.amount);
       if (isNaN(amount) || amount === 0) {
-        console.error(`Transacción con monto inválido: ${JSON.stringify(t)}`);
         return null;
       }
       
-      // Validar y sanitizar campos antes de usar
       const date = String(t.date || new Date().toISOString().split('T')[0]).trim();
       const description = String(t.description || 'Sin descripción').trim();
       const type = String(t.type || 'expense').trim();
       
-      // Log para debugging
-      console.log(`Transacción procesada: ${date} | ${type} | ${description.substring(0, 50)} | $${amount}`);
+      console.log(`Transacción: ${date} | ${type} | ${description.substring(0, 50)} | $${amount} | ${t.category || 'General'}`);
       
       return {
         date: date,
         description: description.substring(0, 500),
         amount: amount.toString(),
         type: type === 'income' ? 'income' : 'expense',
-        category: 'General', // Se clasificará después con IA
-        merchant: description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
+        category: t.category || 'General', // Ya viene clasificada de la IA
+        merchant: t.merchant || description.split(' ').slice(0, 3).join(' ') || 'Desconocido',
         currency: detectedCurrency,
         bank: bank || undefined,
       };
     }).filter((t): t is InsertTransaction => t !== null);
 
-    // Clasificar transacciones con IA (usar el servicio existente)
-    console.log('Clasificando transacciones extraídas con IA...');
-    const { classifyTransactionsBatch } = await import('./ai-service');
-    
-    try {
-      const classifications = await classifyTransactionsBatch(
-        transactions.map(t => ({
-          description: t.description,
-          amount: parseFloat(t.amount) * (t.type === 'income' ? 1 : -1),
-          date: t.date,
-        }))
-      );
-
-      // Aplicar clasificaciones
-      transactions.forEach((t, idx) => {
-        if (classifications[idx]) {
-          t.category = classifications[idx].category || 'General';
-          t.merchant = classifications[idx].merchant || t.merchant;
-        }
-      });
-    } catch (aiError) {
-      console.warn('Error en clasificación IA, usando valores por defecto:', aiError);
-    }
-
-    console.log(`Procesamiento completado: ${transactions.length} transacciones`);
+    console.log(`Procesamiento completado: ${transactions.length} transacciones (sin clasificación adicional necesaria)`);
     return transactions;
   } catch (error: any) {
     console.error('Error procesando PDF con IA:', error);
