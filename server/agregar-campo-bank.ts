@@ -43,8 +43,18 @@ async function authenticateAdmin(): Promise<string> {
   const apiUrl = getApiUrl();
   console.log(`Autenticando con PocketBase en: ${apiUrl}`);
 
+  // Configurar para ignorar certificados SSL si es necesario
+  if (typeof process !== "undefined" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "1") {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  }
+
   try {
-    const response = await fetch(`${apiUrl}api/admins/auth-with-password`, {
+    // Usar el endpoint correcto para PocketBase v0.23+
+    const endpoint = "api/collections/_superusers/auth-with-password";
+    const authUrl = apiUrl + endpoint;
+    console.log(`Intentando autenticación en: ${authUrl}`);
+    
+    const response = await fetch(authUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -72,6 +82,9 @@ async function authenticateAdmin(): Promise<string> {
   } catch (error: any) {
     if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
       throw new Error(`No se pudo conectar a ${POCKETBASE_URL}. Verifica que el servidor esté accesible.`);
+    }
+    if (error.message.includes("certificate") || error.message.includes("SSL")) {
+      throw new Error(`Error de certificado SSL. El servidor podría tener un certificado auto-firmado.`);
     }
     throw error;
   }
