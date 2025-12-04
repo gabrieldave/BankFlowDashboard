@@ -52,26 +52,29 @@ export default function UploadPage() {
     }
   };
 
-  // Cleanup al desmontar el componente
+  // NO cancelar automáticamente al desmontar - permitir que el procesamiento continúe
+  // El procesamiento continuará en segundo plano y se guardará en la base de datos
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      // Solo limpiar intervalos, pero NO cancelar la petición HTTP
+      // Esto permite que el procesamiento continúe aunque el usuario navegue
     };
   }, []);
 
   const processFile = async (file: File) => {
-    // Cancelar cualquier petición anterior
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+    // Cancelar cualquier petición anterior solo si el usuario está en la misma página
+    // No cancelar si el usuario navegó (permitir procesamiento en segundo plano)
+    if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
+      // Solo cancelar si realmente queremos (por ejemplo, si suben otro archivo)
+      // abortControllerRef.current.abort();
     }
 
     setIsUploading(true);
     setUploadProgress(0);
     setStatusMessage("Iniciando procesamiento...");
 
-    // AbortController para cancelar la petición si el componente se desmonta
+    // AbortController - pero NO lo usaremos para cancelar al navegar
+    // Solo para cancelar si el usuario sube otro archivo
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
@@ -102,47 +105,39 @@ export default function UploadPage() {
     };
 
     try {
-      const result = await uploadFile(file, abortController.signal);
+      // NO pasar signal para que el procesamiento continúe aunque el usuario navegue
+      // El procesamiento en el servidor continuará y guardará los datos
+      const result = await uploadFile(file);
       
-      // Solo actualizar si no fue cancelado
-      if (!abortController.signal.aborted) {
-        cleanup();
-        setUploadProgress(100);
-        setStatusMessage("¡Procesamiento completado!");
+      // Procesamiento completado exitosamente
+      cleanup();
+      setUploadProgress(100);
+      setStatusMessage("¡Procesamiento completado!");
 
-        setTimeout(() => {
-          if (!abortController.signal.aborted) {
-            let description = result.message;
-            if (result.duplicates && result.duplicates > 0) {
-              description += ` (${result.duplicates} duplicadas omitidas)`;
-            }
-            toast({
-              title: "¡Archivo procesado!",
-              description,
-            });
-            setLocation("/dashboard");
-          }
-        }, 1000);
-      }
+      setTimeout(() => {
+        let description = result.message;
+        if (result.duplicates && result.duplicates > 0) {
+          description += ` (${result.duplicates} duplicadas omitidas)`;
+        }
+        toast({
+          title: "¡Archivo procesado!",
+          description,
+        });
+        setLocation("/dashboard");
+      }, 1000);
     } catch (error: any) {
       cleanup();
       
-      // Solo mostrar error si no fue cancelado intencionalmente
-      if (!abortController.signal.aborted && error.name !== 'AbortError') {
-        setIsUploading(false);
-        setUploadProgress(0);
-        setStatusMessage("Error al procesar");
-        
-        toast({
-          title: "Error",
-          description: error.message || "No se pudo procesar el archivo",
-          variant: "destructive",
-        });
-      } else if (error.name === 'AbortError') {
-        // Fue cancelado, solo resetear estado
-        setIsUploading(false);
-        setUploadProgress(0);
-      }
+      // Error al procesar, mostrar mensaje
+      setIsUploading(false);
+      setUploadProgress(0);
+      setStatusMessage("Error al procesar");
+      
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo procesar el archivo",
+        variant: "destructive",
+      });
     }
 
     // Cleanup al desmontar
@@ -259,6 +254,9 @@ export default function UploadPage() {
                 <Progress value={uploadProgress} className="h-3" />
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   Por favor espera, esto puede tomar unos minutos...
+                </p>
+                <p className="text-xs text-blue-600 text-center mt-1 font-medium">
+                  💡 Puedes navegar a otras páginas, el procesamiento continuará en segundo plano
                 </p>
               </div>
 
