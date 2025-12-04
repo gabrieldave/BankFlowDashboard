@@ -68,15 +68,68 @@ export async function registerRoutes(
       }
 
       // Verificar si todas las transacciones ya fueron procesadas (duplicadas)
-      let existingTransactions: any[] = [];
+      // Si falla la obtención, simplemente continuamos - createTransactions manejará los duplicados
+      let existingSet = new Set<string>();
+      let duplicateCheckEnabled = false;
+      
       try {
-        existingTransactions = await storage.getAllTransactions();
+        console.log("Obteniendo transacciones existentes para verificación de duplicados...");
+        const existingTransactions = await storage.getAllTransactions();
+        console.log(`Se obtuvieron ${existingTransactions.length} transacciones existentes`);
+        
+        if (existingTransactions && existingTransactions.length > 0) {
+          duplicateCheckEnabled = true;
+          
+          // Función para normalizar y comparar transacciones (igual que en storage.ts)
+          const normalizeTransaction = (t: any) => {
+            // Validar y sanitizar valores para evitar errores con undefined/null
+            if (!t || (typeof t !== 'object')) {
+              return null;
+            }
+            
+            try {
+              const date = (t?.date ? String(t.date).trim() : '').toLowerCase();
+              const description = (t?.description ? String(t.description).trim() : '').toLowerCase().substring(0, 100);
+              const amount = typeof t?.amount === 'string' ? parseFloat(t.amount) : (t?.amount || 0);
+              const type = String(t?.type || 'expense').trim();
+              
+              if (!date && !description) {
+                return null; // Transacción inválida sin fecha ni descripción
+              }
+              
+              return {
+                date: date || new Date().toISOString().split('T')[0],
+                description: description || 'sin descripción',
+                amount: Math.abs(amount || 0).toFixed(2),
+                type: type || 'expense',
+              };
+            } catch (error) {
+              console.warn("Error normalizando transacción:", error, t);
+              return null;
+            }
+          };
+
+          // Filtrar y normalizar transacciones existentes
+          const normalizedKeys = existingTransactions
+            .filter(t => t && typeof t === 'object' && (t.date || t.description || t.amount !== undefined))
+            .map(t => {
+              const normalized = normalizeTransaction(t);
+              return normalized ? `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}` : null;
+            })
+            .filter((key): key is string => key !== null && key.length > 0);
+          
+          existingSet = new Set(normalizedKeys);
+          console.log(`Se normalizaron ${existingSet.size} transacciones existentes para comparación`);
+        } else {
+          console.log("No hay transacciones existentes, se procesarán todas como nuevas");
+        }
       } catch (error: any) {
         console.warn("No se pudieron obtener transacciones existentes para verificación de duplicados:", error.message);
+        console.warn("Continuando sin verificación previa - createTransactions manejará los duplicados");
         // Continuar sin verificación previa - createTransactions manejará los duplicados
       }
       
-      // Función para normalizar y comparar transacciones (igual que en storage.ts)
+      // Función para normalizar transacciones del archivo actual
       const normalizeTransaction = (t: any) => {
         // Validar y sanitizar valores para evitar errores con undefined/null
         const date = (t?.date ? String(t.date).trim() : '').toLowerCase();
@@ -92,36 +145,25 @@ export async function registerRoutes(
         };
       };
 
-      // Crear un Set de transacciones existentes normalizadas
-      // Filtrar transacciones inválidas antes de normalizar
-      const validExistingTransactions = existingTransactions.filter(t => 
-        t && (t.date || t.description || t.amount !== undefined)
-      );
-      
-      const existingSet = new Set(
-        validExistingTransactions.map(t => {
-          try {
-            const normalized = normalizeTransaction(t);
-            return `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
-          } catch (error) {
-            console.warn("Error normalizando transacción existente:", error, t);
-            return null;
-          }
-        }).filter((key): key is string => key !== null)
-      );
-
-      // Contar cuántas transacciones del archivo ya existen
+      // Contar cuántas transacciones del archivo ya existen (solo si la verificación está habilitada)
       let duplicateCount = 0;
-      for (const transaction of validTransactions) {
-        const normalized = normalizeTransaction(transaction);
-        const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
-        if (existingSet.has(key)) {
-          duplicateCount++;
+      if (duplicateCheckEnabled && existingSet.size > 0) {
+        for (const transaction of validTransactions) {
+          try {
+            const normalized = normalizeTransaction(transaction);
+            const key = `${normalized.date}|${normalized.description}|${normalized.amount}|${normalized.type}`;
+            if (existingSet.has(key)) {
+              duplicateCount++;
+            }
+          } catch (error) {
+            console.warn("Error verificando duplicado:", error, transaction);
+          }
         }
+        console.log(`Se encontraron ${duplicateCount} transacciones duplicadas de ${validTransactions.length} totales`);
       }
 
       // Si todas las transacciones ya fueron procesadas, retornar mensaje especial
-      if (duplicateCount === validTransactions.length) {
+      if (duplicateCheckEnabled && duplicateCount === validTransactions.length && validTransactions.length > 0) {
         return res.json({
           message: `Este archivo ya fue procesado anteriormente. Todas las ${validTransactions.length} transacciones ya existen en el sistema.`,
           count: 0,
