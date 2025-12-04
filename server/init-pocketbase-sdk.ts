@@ -15,7 +15,6 @@ try {
 }
 
 let POCKETBASE_URL = process.env.POCKETBASE_URL || "https://estadosdecuenta-db.david-cloud.online/_/";
-// Usar la URL exactamente como está configurada - NO remover nada, NO modificar
 const ADMIN_EMAIL = process.env.POCKETBASE_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD;
 
@@ -27,14 +26,15 @@ async function main() {
     console.log(`🔐 Conectando a PocketBase...`);
     console.log(`URL configurada: ${POCKETBASE_URL}`);
     
-    // SDK de PocketBase - usar la URL exactamente como está, sin modificar
-    // La URL puede terminar en /_/ y eso está bien
+    // Asegurar que la URL no tenga /_/ al final para el SDK
     let apiUrl = POCKETBASE_URL.trim();
-    // Solo asegurar que termine con / si no termina en /_/
-    if (!apiUrl.endsWith("/") && !apiUrl.endsWith("/_/")) {
+    if (apiUrl.endsWith("/_/")) {
+      apiUrl = apiUrl.slice(0, -3); // Remover "/_/"
+    }
+    if (!apiUrl.endsWith("/")) {
       apiUrl += "/";
     }
-    console.log(`URL API (sin modificar): ${apiUrl}\n`);
+    console.log(`URL API: ${apiUrl}\n`);
 
     const pb = new PocketBase(apiUrl);
 
@@ -43,7 +43,7 @@ async function main() {
       console.log("🔑 Autenticando como administrador...");
       console.log(`   Email: ${ADMIN_EMAIL}`);
       try {
-        const authData = await pb.admins.authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
+        const authData = await pb.collection('_superusers').authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
         console.log("✓ Autenticación exitosa\n");
         console.log(`   Token obtenido: ${authData.token ? 'Sí' : 'No'}\n`);
       } catch (error: any) {

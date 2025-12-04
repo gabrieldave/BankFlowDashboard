@@ -61,7 +61,7 @@ if (ADMIN_EMAIL && ADMIN_PASSWORD) {
     // Configurar para ignorar SSL si es necesario
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     
-    await pb.admins.authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
+    await pb.collection('_superusers').authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
     console.log(`   ✓ Autenticación exitosa con SDK\n`);
     
     // Intentar listar colecciones
