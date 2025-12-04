@@ -30,6 +30,18 @@ interface Field {
   options?: any;
 }
 
+// Helper para obtener la URL limpia de la API
+function getApiUrl(): string {
+  let apiUrl = POCKETBASE_URL.trim();
+  if (apiUrl.endsWith("/_/")) {
+    apiUrl = apiUrl.slice(0, -3); // Remover "/_/"
+  }
+  if (!apiUrl.endsWith("/")) {
+    apiUrl += "/";
+  }
+  return apiUrl;
+}
+
 async function authenticateAdmin(): Promise<string> {
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
     throw new Error("POCKETBASE_ADMIN_EMAIL y POCKETBASE_ADMIN_PASSWORD son requeridos");
@@ -58,17 +70,11 @@ async function authenticateAdmin(): Promise<string> {
   }
 
   try {
-    // Ajustar URL para la API (remover /_/ si existe, la API está en la raíz)
-    // Exactamente como en storage.ts
-    let apiUrl = POCKETBASE_URL.trim();
-    if (apiUrl.endsWith("/_/")) {
-      apiUrl = apiUrl.slice(0, -3) + "/"; // Remover "/_/" y agregar "/"
-    } else if (!apiUrl.endsWith("/")) {
-      apiUrl += "/";
-    }
+    // Obtener URL limpia de la API
+    const apiUrl = getApiUrl();
 
-    // El endpoint correcto de PocketBase para autenticación de admin
-    const endpoint = "api/admins/auth-with-password";
+    // El endpoint correcto de PocketBase para autenticación de admin (usar _superusers para v0.23+)
+    const endpoint = "api/collections/_superusers/auth-with-password";
     const authUrl = apiUrl + endpoint;
     console.log(`Intentando autenticación en: ${authUrl}`);
     const response = await fetch(authUrl, fetchOptions);
@@ -123,7 +129,8 @@ async function createCollection(
     deleteRule: "",
   };
 
-  const response = await fetch(`${POCKETBASE_URL}/api/collections`, {
+  const apiUrl = getApiUrl();
+  const response = await fetch(`${apiUrl}api/collections`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -191,7 +198,8 @@ async function main() {
       deleteRule: "id = @request.auth.id",
     };
 
-    const usersResponse = await fetch(`${POCKETBASE_URL}/api/collections`, {
+    const apiUrl = getApiUrl();
+    const usersResponse = await fetch(`${apiUrl}api/collections`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
