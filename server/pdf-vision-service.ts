@@ -59,7 +59,6 @@ async function extractTextFromPDF(buffer: Buffer): Promise<Array<{ pageNumber: n
       verbosity: 0 // Reducir logs
     });
     const pdf = await loadingTask.promise;
-    const pages: Array<{ pageNumber: number; text: string }> = [];
     
     console.log(`Extrayendo texto de ${pdf.numPages} páginas del PDF en paralelo...`);
     
