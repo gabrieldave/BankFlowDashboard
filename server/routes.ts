@@ -306,6 +306,60 @@ export async function registerRoutes(
     }
   });
 
+  // Endpoint de diagnóstico para ver qué está pasando con getAllTransactions
+  app.get("/api/transactions/debug", async (req, res) => {
+    try {
+      console.log("[DEBUG] Iniciando diagnóstico de getAllTransactions...");
+      
+      // Obtener transacciones usando el método normal
+      const transactions = await storage.getAllTransactions();
+      console.log(`[DEBUG] getAllTransactions devolvió: ${transactions.length} transacciones`);
+      
+      // Si es PocketBaseStorage, obtener también los datos raw
+      let rawData = null;
+      if (storage instanceof PocketBaseStorage) {
+        const pb = (storage as any).pb;
+        await (storage as any).ensureAuth();
+        const rawResult = await pb.collection('transactions').getList(1, 5, { sort: '-id' });
+        rawData = {
+          totalItems: rawResult.totalItems,
+          page: rawResult.page,
+          perPage: rawResult.perPage,
+          totalPages: rawResult.totalPages,
+          sampleRecords: rawResult.items?.slice(0, 3).map((item: any) => ({
+            id: item.id,
+            id_number: item.id_number,
+            date: item.date,
+            description: item.description,
+            amount: item.amount,
+            type: item.type,
+            category: item.category,
+            merchant: item.merchant,
+            currency: item.currency,
+            created: item.created,
+            updated: item.updated,
+            // Mostrar todos los campos para diagnóstico
+            allFields: Object.keys(item)
+          }))
+        };
+      }
+      
+      res.json({
+        processedTransactions: transactions.length,
+        firstTransaction: transactions.length > 0 ? transactions[0] : null,
+        rawDataFromPocketBase: rawData,
+        storageType: storage instanceof PocketBaseStorage ? 'PocketBaseStorage' : 'MemStorage'
+      });
+    } catch (error: any) {
+      console.error("[DEBUG] Error en diagnóstico:", error);
+      res.status(500).json({ 
+        error: "Error en diagnóstico",
+        details: error.message,
+        stack: error.stack
+      });
+    }
+  });
+
   app.get("/api/stats", async (req, res) => {
     try {
       const transactions = await storage.getAllTransactions();
