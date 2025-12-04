@@ -147,10 +147,18 @@ export async function registerRoutes(
         });
       }
 
-      // Asegurar que todas las transacciones tengan el banco asignado
+      // Asegurar que todas las transacciones tengan el banco asignado (obligatorio)
+      // Sanitizar y validar el banco según reglas de PocketBase
+      const bankValue = String(selectedBank || '').trim();
+      if (!bankValue || bankValue === '') {
+        return res.status(400).json({ 
+          error: "El banco es obligatorio. Por favor, selecciona un banco de la lista o escribe el nombre de tu banco." 
+        });
+      }
+      
       const transactionsWithBank = transactions.map(t => ({
         ...t,
-        bank: t.bank || selectedBank || undefined,
+        bank: (t.bank ? String(t.bank).trim() : bankValue), // Siempre asignar banco sanitizado
       }));
 
       const validTransactions = transactionsWithBank.filter(t => {

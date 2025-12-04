@@ -510,7 +510,7 @@ export class PocketBaseStorage implements IStorage {
       category: String(item.category || 'Sin categoría').trim(),
       merchant: String(item.merchant || '').trim(),
       currency: String(item.currency || 'MXN').trim().toUpperCase(),
-      bank: item.bank ? String(item.bank).trim() : undefined,
+      bank: item.bank ? String(item.bank).trim() : undefined, // Mantener undefined para compatibilidad con datos antiguos
       createdAt: item.created ? new Date(item.created) : new Date(),
     }));
     
@@ -577,17 +577,33 @@ export class PocketBaseStorage implements IStorage {
       // Si falla, empezamos desde 1
     }
 
+    // Validar y sanitizar datos según reglas de PocketBase
+    // SIEMPRE validar que los datos existen antes de mapearlos
+    // Sanitizar strings con .trim() antes de guardar
+    // Usar valores por defecto para campos opcionales
+    const bankValue = (transaction as any).bank ? String((transaction as any).bank).trim() : '';
+    
+    // Validar que el banco no esté vacío (ahora es obligatorio)
+    if (!bankValue || bankValue === '') {
+      throw new Error('El banco es obligatorio. Todas las transacciones deben tener un banco asignado.');
+    }
+    
     const dataToSave = {
-      date: transaction.date,
-      description: transaction.description,
-      amount: transaction.amount,
-      type: transaction.type,
-      category: transaction.category || 'General',
-      merchant: transaction.merchant || '',
-      currency: transaction.currency || 'MXN',
-      bank: (transaction as any).bank || '',
+      date: String(transaction.date || '').trim(),
+      description: String(transaction.description || '').trim(),
+      amount: String(transaction.amount || '0').trim(),
+      type: String(transaction.type || 'expense').trim(),
+      category: String(transaction.category || 'General').trim(),
+      merchant: String(transaction.merchant || '').trim(),
+      currency: String(transaction.currency || 'MXN').trim().toUpperCase(),
+      bank: bankValue, // Banco obligatorio y sanitizado
       id_number: nextId,
     };
+    
+    // Validar que los campos requeridos no estén vacíos
+    if (!dataToSave.date || !dataToSave.description || !dataToSave.amount) {
+      throw new Error('Campos requeridos faltantes: date, description o amount');
+    }
     
     console.log(`[createTransaction] Guardando transacción:`, JSON.stringify(dataToSave, null, 2));
     
