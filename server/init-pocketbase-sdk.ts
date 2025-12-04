@@ -15,11 +15,7 @@ try {
 }
 
 let POCKETBASE_URL = process.env.POCKETBASE_URL || "https://estadosdecuenta-db.david-cloud.online/_/";
-// Usar la URL exactamente como está configurada - NO remover nada
-if (POCKETBASE_URL.endsWith("/") && !POCKETBASE_URL.endsWith("/_/")) {
-  POCKETBASE_URL = POCKETBASE_URL.slice(0, -1);
-}
-
+// Usar la URL exactamente como está configurada - NO remover nada, NO modificar
 const ADMIN_EMAIL = process.env.POCKETBASE_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD;
 
@@ -31,35 +27,95 @@ async function main() {
     console.log(`🔐 Conectando a PocketBase...`);
     console.log(`URL configurada: ${POCKETBASE_URL}`);
     
-    // SDK de PocketBase necesita la URL base sin /_/ para la API
-    let apiUrl = POCKETBASE_URL;
-    if (apiUrl.endsWith("/_/")) {
-      apiUrl = apiUrl.replace("/_/", "/");
+    // SDK de PocketBase - usar la URL exactamente como está, sin modificar
+    // La URL puede terminar en /_/ y eso está bien
+    let apiUrl = POCKETBASE_URL.trim();
+    // Solo asegurar que termine con / si no termina en /_/
+    if (!apiUrl.endsWith("/") && !apiUrl.endsWith("/_/")) {
+      apiUrl += "/";
     }
-    console.log(`URL API: ${apiUrl}\n`);
+    console.log(`URL API (sin modificar): ${apiUrl}\n`);
 
     const pb = new PocketBase(apiUrl);
 
     // Autenticar como admin
     if (ADMIN_EMAIL && ADMIN_PASSWORD) {
       console.log("🔑 Autenticando como administrador...");
+      console.log(`   Email: ${ADMIN_EMAIL}`);
       try {
-        await pb.admins.authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
+        const authData = await pb.admins.authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
         console.log("✓ Autenticación exitosa\n");
+        console.log(`   Token obtenido: ${authData.token ? 'Sí' : 'No'}\n`);
       } catch (error: any) {
         console.error(`✗ Error de autenticación: ${error.message}`);
-        console.log("\n💡 Nota: Si el endpoint de admin no está disponible, crea las colecciones manualmente desde el panel web.\n");
-        return;
+        console.error(`   Status: ${error.status || 'N/A'}`);
+        console.error(`   Response: ${JSON.stringify(error.response || {})}`);
+        console.log("\n⚠️  No se pudo autenticar, pero intentaremos crear la colección de todas formas...\n");
       }
     } else {
       console.log("⚠️  No hay credenciales de admin configuradas\n");
-      return;
+      console.log("   Continuando sin autenticación...\n");
     }
 
     // Verificar colecciones existentes
     console.log("📦 Verificando colecciones existentes...");
     try {
-      const collections = await pb.collections.getFullList();
+      // Intentar obtener colecciones (puede fallar sin auth)
+      let collections: any[] = [];
+      try {
+        collections = await pb.collections.getFullList();
+      } catch (e: any) {
+        console.log("   ⚠️  No se pudieron obtener colecciones (requiere autenticación)");
+        console.log("   Intentando crear colección directamente...\n");
+        
+        // Intentar crear directamente sin verificar
+        console.log("📝 Creando colección 'users' (tipo auth)...");
+        try {
+          await pb.collections.create({
+            name: "users",
+            type: "auth",
+            schema: [
+              {
+                name: "name",
+                type: "text",
+                required: false,
+              },
+              {
+                name: "avatar",
+                type: "file",
+                required: false,
+                options: {
+                  maxSelect: 1,
+                  maxSize: 5242880,
+                  mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+                },
+              },
+            ],
+            options: {
+              allowEmailAuth: true,
+              allowOAuth2Auth: false,
+              allowUsernameAuth: false,
+              exceptEmailDomains: [],
+              onlyEmailDomains: [],
+              requireEmail: true,
+              minPasswordLength: 8,
+            },
+            listRule: "",
+            viewRule: "id = @request.auth.id",
+            createRule: "",
+            updateRule: "id = @request.auth.id",
+            deleteRule: "id = @request.auth.id",
+          });
+          console.log("✅ Colección 'users' creada exitosamente!\n");
+          return;
+        } catch (createError: any) {
+          console.error(`❌ Error creando 'users': ${createError.message}`);
+          console.error(`   Status: ${createError.status || 'N/A'}`);
+          throw createError;
+        }
+      }
+      
+      collections = await pb.collections.getFullList();
       console.log(`   Encontradas ${collections.length} colecciones:`);
       collections.forEach((c: any) => {
         console.log(`     - ${c.name} (${c.type})`);
@@ -76,20 +132,49 @@ async function main() {
 
       // Crear colección users si no existe
       if (!hasUsers) {
-        console.log("📝 Creando colección 'users'...");
+        console.log("📝 Creando colección 'users' (tipo auth)...");
         try {
           await pb.collections.create({
             name: "users",
             type: "auth",
             schema: [
-              { name: "username", type: "text", required: true, unique: true },
-              { name: "password", type: "text", required: true },
+              {
+                name: "name",
+                type: "text",
+                required: false,
+              },
+              {
+                name: "avatar",
+                type: "file",
+                required: false,
+                options: {
+                  maxSelect: 1,
+                  maxSize: 5242880, // 5MB
+                  mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+                },
+              },
             ],
+            options: {
+              allowEmailAuth: true,
+              allowOAuth2Auth: false,
+              allowUsernameAuth: false,
+              exceptEmailDomains: [],
+              onlyEmailDomains: [],
+              requireEmail: true,
+              minPasswordLength: 8,
+            },
+            listRule: "",
+            viewRule: "id = @request.auth.id",
+            createRule: "",
+            updateRule: "id = @request.auth.id",
+            deleteRule: "id = @request.auth.id",
           });
-          console.log("✓ Colección 'users' creada\n");
+          console.log("✓ Colección 'users' creada exitosamente\n");
         } catch (error: any) {
           console.error(`✗ Error creando 'users': ${error.message}\n`);
         }
+      } else {
+        console.log("✓ Colección 'users' ya existe\n");
       }
 
       // Crear colección transactions si no existe

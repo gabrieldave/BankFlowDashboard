@@ -1,9 +1,9 @@
 /**
- * Script para crear la colección de usuarios tipo "auth" en PocketBase
+ * Script para crear la colección de usuarios tipo "auth" en PocketBase usando el SDK
  * Ejecutar: tsx server/init-users-collection.ts
  */
 
-// Cargar variables de entorno desde .env
+// Cargar variables de entorno
 try {
   const dotenv = await import("dotenv");
   if (dotenv.default) {
@@ -12,182 +12,132 @@ try {
     dotenv.config();
   }
 } catch (e) {
-  console.log("dotenv no disponible, usando variables de entorno del sistema");
+  console.log("dotenv no disponible");
 }
 
 let POCKETBASE_URL = process.env.POCKETBASE_URL || "https://estadosdecuenta-db.david-cloud.online/_/";
-// Usar la URL exactamente como está configurada - NO remover nada
-if (POCKETBASE_URL.endsWith("/") && !POCKETBASE_URL.endsWith("/_/")) {
-  POCKETBASE_URL = POCKETBASE_URL.slice(0, -1);
-}
+// Usar la URL exactamente como está configurada - NO remover nada, NO modificar
 const ADMIN_EMAIL = process.env.POCKETBASE_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD;
 
-async function authenticateAdmin(): Promise<string> {
-  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-    throw new Error("POCKETBASE_ADMIN_EMAIL y POCKETBASE_ADMIN_PASSWORD son requeridos");
-  }
-
-  if (!POCKETBASE_URL) {
-    throw new Error("POCKETBASE_URL no está configurada");
-  }
-
-  console.log(`Conectando a: ${POCKETBASE_URL}`);
-
-  // Configurar fetch para ignorar certificados SSL si es necesario
-  const fetchOptions: any = {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      identity: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
-    }),
-  };
-
-  if (typeof process !== "undefined" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "1") {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  }
-
-  try {
-    // Ajustar URL para la API (remover /_/ si existe, la API está en la raíz)
-    // Exactamente como en storage.ts línea 133-137
-    let apiUrl = POCKETBASE_URL.trim();
-    if (apiUrl.endsWith("/_/")) {
-      apiUrl = apiUrl.slice(0, -3) + "/"; // Remover "/_/" y agregar "/"
-    } else if (apiUrl.endsWith("/_")) {
-      apiUrl = apiUrl.slice(0, -2) + "/"; // Remover "/_" y agregar "/"
-    } else if (!apiUrl.endsWith("/")) {
-      apiUrl += "/";
-    }
-    
-    const endpoint = "api/admins/auth-with-password";
-    const authUrl = `${apiUrl}${endpoint}`;
-    console.log(`Intentando autenticación en: ${authUrl}`);
-    const response = await fetch(authUrl, fetchOptions);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `Error de autenticación: ${response.status} ${response.statusText}`;
-      try {
-        const error = JSON.parse(errorText);
-        errorMessage = `Error de autenticación: ${error.message || errorMessage}`;
-      } catch {
-        errorMessage = `Error de autenticación: ${errorText || errorMessage}`;
-      }
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    return data.token;
-  } catch (error: any) {
-    if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
-      throw new Error(`No se pudo conectar a ${POCKETBASE_URL}. Verifica que el servidor esté accesible.`);
-    }
-    if (error.message.includes("certificate") || error.message.includes("SSL") || error.message.includes("UNABLE_TO_VERIFY_LEAF_SIGNATURE")) {
-      throw new Error(`Error de certificado SSL. El servidor podría tener un certificado auto-firmado.`);
-    }
-    if (error.message === "fetch failed") {
-      throw new Error(`No se pudo establecer conexión con ${POCKETBASE_URL}.`);
-    }
-    throw error;
-  }
-}
-
-async function createUsersCollection(token: string) {
-  // Verificar si la colección ya existe
-  try {
-    const checkResponse = await fetch(`${POCKETBASE_URL}/api/collections/users`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (checkResponse.ok) {
-      console.log("✓ Colección 'users' ya existe");
-      return;
-    }
-  } catch (e) {
-    // Continuar con la creación
-  }
-
-  // Crear colección de usuarios tipo "auth"
-  const collectionData = {
-    name: "users",
-    type: "auth", // Tipo auth para autenticación
-    schema: [
-      {
-        name: "name",
-        type: "text",
-        required: false,
-      },
-      {
-        name: "avatar",
-        type: "file",
-        required: false,
-        options: {
-          maxSelect: 1,
-          maxSize: 5242880, // 5MB
-          mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
-        },
-      },
-    ],
-    options: {
-      allowEmailAuth: true,
-      allowOAuth2Auth: false,
-      allowUsernameAuth: false,
-      exceptEmailDomains: [],
-      onlyEmailDomains: [],
-      requireEmail: true,
-      minPasswordLength: 8,
-    },
-    listRule: "",
-    viewRule: "id = @request.auth.id",
-    createRule: "",
-    updateRule: "id = @request.auth.id",
-    deleteRule: "id = @request.auth.id",
-  };
-
-  // Usar la URL exacta como en init-pocketbase.ts
-  const response = await fetch(`${POCKETBASE_URL}/api/collections`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(collectionData),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    if (error.message?.includes("already exists") || response.status === 400) {
-      console.log(`✓ Colección "users" ya existe`);
-      return;
-    }
-    throw new Error(`Error creando colección users: ${error.message || response.statusText}`);
-  }
-
-  console.log(`✓ Colección "users" creada exitosamente`);
-}
-
 async function main() {
   try {
-    console.log("🔐 Autenticando con PocketBase...");
-    const token = await authenticateAdmin();
-    console.log("✓ Autenticación exitosa\n");
+    // Intentar importar PocketBase SDK
+    const { default: PocketBase } = await import("pocketbase");
+    
+    console.log(`🔐 Conectando a PocketBase...`);
+    console.log(`URL configurada: ${POCKETBASE_URL}`);
+    
+    // SDK de PocketBase - usar la URL exactamente como está, sin modificar
+    // La URL puede terminar en /_/ y eso está bien
+    let apiUrl = POCKETBASE_URL.trim();
+    // Solo asegurar que termine con / si no termina en /_/
+    if (!apiUrl.endsWith("/") && !apiUrl.endsWith("/_/")) {
+      apiUrl += "/";
+    }
+    console.log(`URL API: ${apiUrl}\n`);
 
-    console.log("📦 Creando colección de usuarios...\n");
-    await createUsersCollection(token);
+    const pb = new PocketBase(apiUrl);
 
-    console.log("\n✅ Inicialización completada!");
+    // Autenticar como admin
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+      throw new Error("POCKETBASE_ADMIN_EMAIL y POCKETBASE_ADMIN_PASSWORD son requeridos");
+    }
+
+    console.log("🔑 Autenticando como administrador...");
+    console.log(`   Email: ${ADMIN_EMAIL}`);
+    try {
+      const authData = await pb.admins.authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
+      console.log("✓ Autenticación exitosa\n");
+    } catch (error: any) {
+      console.error(`✗ Error de autenticación: ${error.message}`);
+      console.error(`   Status: ${error.status || 'N/A'}`);
+      throw error;
+    }
+
+    // Verificar si la colección ya existe
+    console.log("📦 Verificando colecciones existentes...");
+    let collections: any[] = [];
+    try {
+      collections = await pb.collections.getFullList();
+      console.log(`   Encontradas ${collections.length} colecciones:`);
+      collections.forEach((c: any) => {
+        console.log(`     - ${c.name} (${c.type})`);
+      });
+      console.log("");
+    } catch (error: any) {
+      console.error(`✗ Error obteniendo colecciones: ${error.message}`);
+      throw error;
+    }
+
+    const hasUsers = collections.some((c: any) => c.name === "users");
+
+    if (hasUsers) {
+      console.log("✓ Colección 'users' ya existe");
+      console.log("\n✅ La colección 'users' está lista para autenticación.");
+      return;
+    }
+
+    // Crear colección users si no existe
+    console.log("📝 Creando colección 'users' (tipo auth)...");
+    try {
+      await pb.collections.create({
+        name: "users",
+        type: "auth",
+        schema: [
+          {
+            name: "name",
+            type: "text",
+            required: false,
+          },
+          {
+            name: "avatar",
+            type: "file",
+            required: false,
+            options: {
+              maxSelect: 1,
+              maxSize: 5242880, // 5MB
+              mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+            },
+          },
+        ],
+        options: {
+          allowEmailAuth: true,
+          allowOAuth2Auth: false,
+          allowUsernameAuth: false,
+          exceptEmailDomains: [],
+          onlyEmailDomains: [],
+          requireEmail: true,
+          minPasswordLength: 8,
+        },
+        listRule: "",
+        viewRule: "id = @request.auth.id",
+        createRule: "",
+        updateRule: "id = @request.auth.id",
+        deleteRule: "id = @request.auth.id",
+      });
+      console.log("✓ Colección 'users' creada exitosamente\n");
+    } catch (error: any) {
+      if (error.message?.includes("already exists") || error.status === 400) {
+        console.log("✓ Colección 'users' ya existe\n");
+      } else {
+        console.error(`✗ Error creando 'users': ${error.message}`);
+        throw error;
+      }
+    }
+
+    console.log("✅ Inicialización completada!");
     console.log("\nLa colección 'users' está lista para autenticación.");
     console.log("\nNota: Los usuarios pueden registrarse desde la aplicación.");
   } catch (error: any) {
-    console.error("❌ Error:", error.message);
+    if (error.message.includes("Cannot find module")) {
+      console.error("❌ El SDK de PocketBase no está instalado.");
+      console.log("   Ejecuta: npm install pocketbase");
+    } else {
+      console.error(`❌ Error: ${error.message}`);
+    }
     process.exit(1);
   }
 }
 
 main();
-
