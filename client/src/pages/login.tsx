@@ -187,6 +187,7 @@ export default function Login() {
           </form>
         </CardContent>
       </Card>
+      </div>
       
       {/* Versión móvil de la introducción */}
       <div className="md:hidden mt-8 space-y-4 text-center">
