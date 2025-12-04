@@ -98,198 +98,11 @@ export default function Dashboard() {
   const deferredFilterWeek = useDeferredValue(filterWeek);
   const deferredFilterBank = useDeferredValue(filterBank);
 
-  // Validar transacciones primero
+  // ===== PRIMERO: VALIDACIONES Y EARLY RETURNS =====
+  
+  // Validar que tenemos transacciones válidas
   const hasValidTransactions = Array.isArray(transactions) && transactions.length > 0;
   
-  // Normalizar y estabilizar el array de transacciones - solo calcular si hay datos
-  const transactionsArray = useMemo(() => {
-    if (!hasValidTransactions) return [];
-    return transactions || [];
-  }, [hasValidTransactions, transactions]);
-
-  const transactionsLength = transactionsArray.length;
-
-  // Obtener categorías únicas para el filtro - solo si hay datos válidos
-  const availableCategories = useMemo(() => {
-    if (!hasValidTransactions || transactionsLength === 0) return [];
-    try {
-      const categories = new Set<string>();
-      transactionsArray.forEach(t => {
-        if (t?.category) {
-          categories.add(t.category);
-        }
-      });
-      return Array.from(categories).sort();
-    } catch (error) {
-      console.error('Error calculando categorías:', error);
-      return [];
-    }
-  }, [hasValidTransactions, transactionsLength, transactionsArray]);
-
-  // Obtener meses únicos disponibles en las transacciones (optimizado)
-  const availableMonths = useMemo(() => {
-    if (transactionsLength === 0) return [];
-    try {
-      const monthMap = new Map<string, string>();
-      transactionsArray.forEach(t => {
-        try {
-          if (!t?.date) return;
-          const date = new Date(t.date);
-          if (!isNaN(date.getTime())) {
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            if (!monthMap.has(monthKey)) {
-              const monthLabel = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-              monthMap.set(monthKey, monthLabel);
-            }
-          }
-        } catch (e) {
-          // Ignorar fechas inválidas
-        }
-      });
-      return Array.from(monthMap.entries())
-        .map(([key, label]) => ({ key, label }))
-        .sort((a, b) => b.key.localeCompare(a.key));
-    } catch (error) {
-      console.error('Error calculando meses:', error);
-      return [];
-    }
-  }, [transactionsLength, transactionsArray]);
-
-  // Obtener semanas disponibles (optimizado)
-  const availableWeeks = useMemo(() => {
-    if (transactionsLength === 0) return [];
-    try {
-      const weekMap = new Map<string, string>();
-      transactionsArray.forEach(t => {
-        try {
-          if (!t?.date) return;
-          const date = new Date(t.date);
-          if (!isNaN(date.getTime())) {
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay()); // Domingo de la semana
-            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
-            if (!weekMap.has(weekKey)) {
-              const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
-              weekMap.set(weekKey, weekLabel);
-            }
-          }
-        } catch (e) {
-          // Ignorar fechas inválidas
-        }
-      });
-      return Array.from(weekMap.entries())
-        .map(([key, label]) => ({ key, label }))
-        .sort((a, b) => b.key.localeCompare(a.key));
-    } catch (error) {
-      console.error('Error calculando semanas:', error);
-      return [];
-    }
-  }, [transactionsLength, transactionsArray]);
-
-  // Obtener bancos únicos disponibles (optimizado)
-  const availableBanks = useMemo(() => {
-    if (transactionsLength === 0) return [];
-    try {
-      const bankSet = new Set<string>();
-      transactionsArray.forEach(t => {
-        if (t?.bank && typeof t.bank === 'string' && t.bank.trim()) {
-          bankSet.add(t.bank.trim());
-        }
-      });
-      return Array.from(bankSet).sort();
-    } catch (error) {
-      console.error('Error calculando bancos:', error);
-      return [];
-    }
-  }, [transactionsLength, transactionsArray]);
-
-  // Filtrar y ordenar transacciones (optimizado con manejo de errores y deferred values)
-  const filteredTransactions = useMemo(() => {
-    if (transactionsLength === 0) return [];
-    
-    try {
-      let filtered = [...transactionsArray];
-      
-      // Filtrar por tipo
-      if (deferredFilterType !== 'all') {
-        filtered = filtered.filter(t => t.type === deferredFilterType);
-      }
-      
-      // Filtrar por categoría
-      if (deferredFilterCategory !== 'all') {
-        filtered = filtered.filter(t => t.category === deferredFilterCategory);
-      }
-      
-      // Filtrar por mes
-      if (deferredFilterMonth !== 'all') {
-        filtered = filtered.filter(t => {
-          try {
-            const date = new Date(t.date);
-            if (isNaN(date.getTime())) return false;
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            return monthKey === deferredFilterMonth;
-          } catch (e) {
-            return false;
-          }
-        });
-      }
-      
-      // Filtrar por semana
-      if (deferredFilterWeek !== 'all') {
-        filtered = filtered.filter(t => {
-          try {
-            const date = new Date(t.date);
-            if (isNaN(date.getTime())) return false;
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay());
-            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
-            return weekKey === deferredFilterWeek;
-          } catch (e) {
-            return false;
-          }
-        });
-      }
-      
-      // Filtrar por banco
-      if (deferredFilterBank !== 'all') {
-        filtered = filtered.filter(t => t.bank && t.bank.trim().toLowerCase() === deferredFilterBank.toLowerCase());
-      }
-      
-      // Aplicar búsqueda
-      if (deferredSearchQuery.trim()) {
-        const query = deferredSearchQuery.toLowerCase();
-        filtered = filtered.filter(t => {
-          try {
-            return (
-              (t.description || '').toLowerCase().includes(query) ||
-              (t.merchant || '').toLowerCase().includes(query) ||
-              (t.category || '').toLowerCase().includes(query) ||
-              (t.amount || '').includes(query)
-            );
-          } catch (e) {
-            return false;
-          }
-        });
-      }
-      
-      // Ordenar por fecha (más recientes primero)
-      filtered.sort((a, b) => {
-        try {
-          const dateA = new Date(a.date || 0).getTime();
-          const dateB = new Date(b.date || 0).getTime();
-          return dateB - dateA;
-        } catch (e) {
-          return 0;
-        }
-      });
-      
-      return filtered;
-    } catch (error) {
-      console.error('Error filtrando transacciones:', error);
-      return [];
-    }
-  }, [transactionsLength, transactionsArray, deferredSearchQuery, deferredFilterType, deferredFilterCategory, deferredFilterMonth, deferredFilterWeek, deferredFilterBank]);
-
   // Mostrar estado de carga con skeleton - solo si realmente está cargando y no hay datos
   const isLoading = (loadingTransactions || loadingStats) && !transactions && !stats;
   
@@ -440,24 +253,185 @@ export default function Dashboard() {
     return null;
   }
 
-  // Obtener la moneda más común de las transacciones, o usar MXN por defecto (optimizado)
-  const defaultCurrency = useMemo(() => {
-    if (transactionsLength === 0) return 'MXN';
+  // ===== DESPUÉS DE VALIDACIONES: CÁLCULOS =====
+  // Solo calcular cuando los datos estén confirmados como válidos
+
+  // Normalizar array de transacciones
+  const transactionsArray = transactions || [];
+  const transactionsLength = transactionsArray.length;
+
+  // Obtener la moneda más común (función simple como Analytics)
+  const getMostCommonCurrency = (): string => {
+    if (!transactions || transactions.length === 0) return 'MXN';
+    const currencyCounts: Record<string, number> = {};
+    transactions.forEach(t => {
+      const currency = t.currency || 'MXN';
+      currencyCounts[currency] = (currencyCounts[currency] || 0) + 1;
+    });
+    const mostCommon = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0];
+    return mostCommon ? mostCommon[0] : 'MXN';
+  };
+  const defaultCurrency = getMostCommonCurrency();
+
+  // Obtener categorías únicas
+  const getAvailableCategories = (): string[] => {
+    if (!hasValidTransactions) return [];
     try {
-      const currencyCounts: Record<string, number> = {};
+      const categories = new Set<string>();
       transactionsArray.forEach(t => {
-        if (t && typeof t === 'object') {
-          const currency = t.currency || 'MXN';
-          currencyCounts[currency] = (currencyCounts[currency] || 0) + 1;
+        if (t?.category) categories.add(t.category);
+      });
+      return Array.from(categories).sort();
+    } catch {
+      return [];
+    }
+  };
+  const availableCategories = getAvailableCategories();
+
+  // Obtener meses únicos
+  const getAvailableMonths = () => {
+    if (transactionsLength === 0) return [];
+    try {
+      const monthMap = new Map<string, string>();
+      transactionsArray.forEach(t => {
+        try {
+          if (!t?.date) return;
+          const date = new Date(t.date);
+          if (!isNaN(date.getTime())) {
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthMap.has(monthKey)) {
+              const monthLabel = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+              monthMap.set(monthKey, monthLabel);
+            }
+          }
+        } catch {}
+      });
+      return Array.from(monthMap.entries())
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => b.key.localeCompare(a.key));
+    } catch {
+      return [];
+    }
+  };
+  const availableMonths = getAvailableMonths();
+
+  // Obtener semanas únicas
+  const getAvailableWeeks = () => {
+    if (transactionsLength === 0) return [];
+    try {
+      const weekMap = new Map<string, string>();
+      transactionsArray.forEach(t => {
+        try {
+          if (!t?.date) return;
+          const date = new Date(t.date);
+          if (!isNaN(date.getTime())) {
+            const weekStart = new Date(date);
+            weekStart.setDate(date.getDate() - date.getDay());
+            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
+            if (!weekMap.has(weekKey)) {
+              const weekLabel = `Semana del ${weekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
+              weekMap.set(weekKey, weekLabel);
+            }
+          }
+        } catch {}
+      });
+      return Array.from(weekMap.entries())
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => b.key.localeCompare(a.key));
+    } catch {
+      return [];
+    }
+  };
+  const availableWeeks = getAvailableWeeks();
+
+  // Obtener bancos únicos
+  const getAvailableBanks = (): string[] => {
+    if (transactionsLength === 0) return [];
+    try {
+      const bankSet = new Set<string>();
+      transactionsArray.forEach(t => {
+        if (t?.bank && typeof t.bank === 'string' && t.bank.trim()) {
+          bankSet.add(t.bank.trim());
         }
       });
-      const mostCommon = Object.entries(currencyCounts).sort((a, b) => b[1] - a[1])[0];
-      return mostCommon ? mostCommon[0] : 'MXN';
-    } catch (error) {
-      console.error('Error calculando moneda por defecto:', error);
-      return 'MXN';
+      return Array.from(bankSet).sort();
+    } catch {
+      return [];
     }
-  }, [transactionsLength, transactionsArray]);
+  };
+  const availableBanks = getAvailableBanks();
+
+  // Filtrar transacciones
+  const getFilteredTransactions = () => {
+    if (transactionsLength === 0) return [];
+    try {
+      let filtered = [...transactionsArray];
+      
+      if (deferredFilterType !== 'all') {
+        filtered = filtered.filter(t => t.type === deferredFilterType);
+      }
+      if (deferredFilterCategory !== 'all') {
+        filtered = filtered.filter(t => t.category === deferredFilterCategory);
+      }
+      if (deferredFilterMonth !== 'all') {
+        filtered = filtered.filter(t => {
+          try {
+            const date = new Date(t.date);
+            if (isNaN(date.getTime())) return false;
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            return monthKey === deferredFilterMonth;
+          } catch {
+            return false;
+          }
+        });
+      }
+      if (deferredFilterWeek !== 'all') {
+        filtered = filtered.filter(t => {
+          try {
+            const date = new Date(t.date);
+            if (isNaN(date.getTime())) return false;
+            const weekStart = new Date(date);
+            weekStart.setDate(date.getDate() - date.getDay());
+            const weekKey = `${weekStart.getFullYear()}-W${String(Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)).padStart(2, '0')}`;
+            return weekKey === deferredFilterWeek;
+          } catch {
+            return false;
+          }
+        });
+      }
+      if (deferredFilterBank !== 'all') {
+        filtered = filtered.filter(t => t.bank && t.bank.trim().toLowerCase() === deferredFilterBank.toLowerCase());
+      }
+      if (deferredSearchQuery.trim()) {
+        const query = deferredSearchQuery.toLowerCase();
+        filtered = filtered.filter(t => {
+          try {
+            return (
+              (t.description || '').toLowerCase().includes(query) ||
+              (t.merchant || '').toLowerCase().includes(query) ||
+              (t.category || '').toLowerCase().includes(query) ||
+              (t.amount || '').includes(query)
+            );
+          } catch {
+            return false;
+          }
+        });
+      }
+      filtered.sort((a, b) => {
+        try {
+          const dateA = new Date(a.date || 0).getTime();
+          const dateB = new Date(b.date || 0).getTime();
+          return dateB - dateA;
+        } catch {
+          return 0;
+        }
+      });
+      return filtered;
+    } catch {
+      return [];
+    }
+  };
+  const filteredTransactions = getFilteredTransactions();
 
   // Preparar datos de categorías con colores (optimizado)
   const categoryDataWithColors = useMemo(() => {
