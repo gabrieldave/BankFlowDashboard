@@ -136,3 +136,4 @@ Una vez configurado, verifica:
 
 Si después de estos pasos sigue sin funcionar, la mejor opción es crear las colecciones manualmente desde el panel web, ya que la aplicación funcionará igual una vez que las colecciones existan.
 
+

@@ -68,3 +68,4 @@ Una vez configurado, el sistema usará automáticamente PocketBase cuando detect
 - El sistema genera automáticamente un `id_number` numérico para mantener compatibilidad con el código existente
 - Si necesitas resetear las colecciones, puedes eliminarlas desde el panel de administración de PocketBase
 
+

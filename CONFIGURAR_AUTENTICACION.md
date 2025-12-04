@@ -153,3 +153,4 @@ Las siguientes rutas son públicas:
 - [ ] Verificar que las rutas estén protegidas
 - [ ] Verificar que el favicon se muestre correctamente
 
+

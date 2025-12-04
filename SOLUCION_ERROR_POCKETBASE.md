@@ -68,3 +68,4 @@ Si tu PocketBase está expuesto públicamente, considera:
 - Proteger PocketBase con firewall o VPN
 - Usar autenticación de usuario en lugar de admin para operaciones normales
 
+

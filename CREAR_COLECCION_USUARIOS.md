@@ -57,3 +57,4 @@ Si ya existe una colección `users` de tipo "Base", necesitas:
 
 O renombrar la existente y crear una nueva `users` de tipo "Auth".
 
+

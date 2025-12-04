@@ -77,3 +77,4 @@ Una vez creadas las colecciones, la aplicación debería poder conectarse autom�
 - Asegúrate de que el servidor PocketBase esté accesible
 - Verifica que no haya problemas de firewall
 
+

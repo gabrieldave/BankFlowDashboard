@@ -208,9 +208,60 @@ export class PocketBaseStorage implements IStorage {
 
   async getAllTransactions(): Promise<Transaction[]> {
     await this.ensureAuth();
-    const records = await this.pb.collection('transactions').getFullList({
-      sort: '-created',
-    });
+    
+    // Try different sort options, falling back if one fails
+    let records: any[] = [];
+    try {
+      // First try sorting by created date (most common)
+      records = await this.pb.collection('transactions').getFullList({
+        sort: '-created',
+      });
+    } catch (error: any) {
+      console.warn("Error sorting by -created, trying alternative sorts:", error.message);
+      try {
+        // Try sorting by id (should always exist)
+        records = await this.pb.collection('transactions').getFullList({
+          sort: '-id',
+        });
+      } catch (error2: any) {
+        console.warn("Error sorting by -id, trying without sort:", error2.message);
+        try {
+          // Try without sort
+          records = await this.pb.collection('transactions').getFullList();
+        } catch (error3: any) {
+          console.error("Error fetching transactions without sort:", error3.message);
+          // Last resort: use paginated getList
+          records = [];
+          let page = 1;
+          let hasMore = true;
+          while (hasMore) {
+            try {
+              const result = await this.pb.collection('transactions').getList(page, 500);
+              records.push(...(result.items || []));
+              hasMore = result.items && result.items.length === 500;
+              page++;
+            } catch (pageError: any) {
+              console.error(`Error fetching page ${page}:`, pageError.message);
+              hasMore = false;
+            }
+          }
+        }
+      }
+    }
+    
+    // Sort records by date in memory if we couldn't sort on the server
+    // Only sort if we have records and they don't have a created field (meaning server-side sort failed)
+    if (records.length > 0) {
+      const hasCreatedField = records.some(r => r.created);
+      if (!hasCreatedField) {
+        records.sort((a, b) => {
+          const dateA = new Date(a.date || 0).getTime();
+          const dateB = new Date(b.date || 0).getTime();
+          return dateB - dateA; // Descending order (newest first)
+        });
+      }
+    }
+    
     return records.map((item: any, index: number) => ({
       id: item.id_number || this.hashStringToNumber(item.id) || (index + 1),
       date: item.date,

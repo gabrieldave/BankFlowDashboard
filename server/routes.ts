@@ -68,7 +68,13 @@ export async function registerRoutes(
       }
 
       // Verificar si todas las transacciones ya fueron procesadas (duplicadas)
-      const existingTransactions = await storage.getAllTransactions();
+      let existingTransactions: any[] = [];
+      try {
+        existingTransactions = await storage.getAllTransactions();
+      } catch (error: any) {
+        console.warn("No se pudieron obtener transacciones existentes para verificación de duplicados:", error.message);
+        // Continuar sin verificación previa - createTransactions manejará los duplicados
+      }
       
       // Función para normalizar y comparar transacciones (igual que en storage.ts)
       const normalizeTransaction = (t: any) => {

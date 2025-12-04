@@ -71,3 +71,4 @@ Si ya existe una colección `users` de tipo "Base":
 **Tiempo estimado**: 3-5 minutos
 **Dificultad**: Fácil
 
+
