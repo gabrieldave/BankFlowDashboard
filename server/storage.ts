@@ -283,16 +283,24 @@ export class PocketBaseStorage implements IStorage {
             if (result.items && result.items.length > 0) {
               // Verificar que los items tengan los campos de datos
               const firstItem = result.items[0];
-              if (!firstItem.date && !firstItem.description && !firstItem.amount) {
-                console.warn(`[getAllTransactions] Los items solo tienen metadata, intentando obtener campos individualmente...`);
-                // Si solo tiene metadata, intentar obtener los campos expandiendo
+              const hasDataFields = firstItem.date !== undefined || firstItem.description !== undefined || firstItem.amount !== undefined || firstItem.type !== undefined;
+              const onlyMetadata = firstItem.collectionId && firstItem.collectionName && firstItem.id && !hasDataFields;
+              
+              if (onlyMetadata) {
+                console.warn(`[getAllTransactions] Los items solo tienen metadata (página ${page}), obteniendo campos individualmente...`);
+                console.log(`[getAllTransactions] Primer item (solo metadata):`, JSON.stringify(firstItem));
+                // Si solo tiene metadata, obtener cada registro individualmente
                 const expandedItems = await Promise.all(
-                  result.items.map(async (item: any) => {
+                  result.items.map(async (item: any, idx: number) => {
                     try {
                       const fullRecord = await this.pb.collection('transactions').getOne(item.id);
+                      if (idx === 0) {
+                        console.log(`[getAllTransactions] Primer registro expandido:`, JSON.stringify(fullRecord));
+                      }
                       return fullRecord;
-                    } catch (e) {
-                      return item;
+                    } catch (e: any) {
+                      console.warn(`[getAllTransactions] Error obteniendo registro ${item.id}:`, e.message);
+                      return item; // Devolver el item original si falla
                     }
                   })
                 );
