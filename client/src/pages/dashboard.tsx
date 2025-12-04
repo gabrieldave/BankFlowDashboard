@@ -66,6 +66,7 @@ export default function Dashboard() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterMonth, setFilterMonth] = useState<string>('all');
   const [filterWeek, setFilterWeek] = useState<string>('all');
+  const [filterBank, setFilterBank] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'all' | 'monthly' | 'weekly'>('all');
   
   const { data: transactions, isLoading: loadingTransactions } = useQuery({
@@ -129,6 +130,18 @@ export default function Dashboard() {
       .sort((a, b) => b.key.localeCompare(a.key));
   }, [transactions]);
 
+  // Obtener bancos únicos disponibles
+  const availableBanks = useMemo(() => {
+    if (!transactions) return [];
+    const bankSet = new Set<string>();
+    transactions.forEach(t => {
+      if (t.bank && t.bank.trim()) {
+        bankSet.add(t.bank.trim());
+      }
+    });
+    return Array.from(bankSet).sort();
+  }, [transactions]);
+
   // Filtrar y ordenar transacciones
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
@@ -175,6 +188,11 @@ export default function Dashboard() {
       });
     }
     
+    // Filtrar por banco
+    if (filterBank !== 'all') {
+      filtered = filtered.filter(t => t.bank && t.bank.trim().toLowerCase() === filterBank.toLowerCase());
+    }
+    
     // Aplicar búsqueda
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -194,7 +212,7 @@ export default function Dashboard() {
     });
     
     return filtered;
-  }, [transactions, searchQuery, filterType, filterCategory, filterMonth, filterWeek]);
+  }, [transactions, searchQuery, filterType, filterCategory, filterMonth, filterWeek, filterBank]);
 
   if (loadingTransactions || loadingStats) {
     return (
@@ -575,7 +593,20 @@ export default function Dashboard() {
                 ))}
               </SelectContent>
             </Select>
-            {(filterType !== 'all' || filterCategory !== 'all' || filterMonth !== 'all' || filterWeek !== 'all' || searchQuery) && (
+            {availableBanks.length > 0 && (
+              <Select value={filterBank} onValueChange={setFilterBank}>
+                <SelectTrigger className="h-9 w-[160px] bg-gray-50 border-gray-200">
+                  <SelectValue placeholder="Banco" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los bancos</SelectItem>
+                  {availableBanks.map(bank => (
+                    <SelectItem key={bank} value={bank}>{bank}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {(filterType !== 'all' || filterCategory !== 'all' || filterMonth !== 'all' || filterWeek !== 'all' || filterBank !== 'all' || searchQuery) && (
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -585,6 +616,7 @@ export default function Dashboard() {
                   setFilterCategory('all');
                   setFilterMonth('all');
                   setFilterWeek('all');
+                  setFilterBank('all');
                   setSearchQuery('');
                 }}
               >
@@ -631,9 +663,14 @@ export default function Dashboard() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-0 font-normal">
-                      {transaction.category}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="secondary" className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-0 font-normal w-fit">
+                        {transaction.category}
+                      </Badge>
+                      {transaction.bank && (
+                        <span className="text-xs text-muted-foreground">{transaction.bank}</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className={`text-right font-semibold ${
                     transaction.type === 'income' ? 'text-green-600' : 'text-gray-900'

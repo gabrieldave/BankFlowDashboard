@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { Upload, FileText, CheckCircle2, AlertCircle, FileType, Loader2 } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, FileType, Loader2, Building2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { uploadFile } from "@/lib/api";
+import { uploadFile, getBanks, type Bank } from "@/lib/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function UploadPage() {
   const [, setLocation] = useLocation();
@@ -15,6 +22,9 @@ export default function UploadPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Analizando transacciones...");
+  const [selectedBank, setSelectedBank] = useState<string>('');
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const uploadStartTimeRef = useRef<number | null>(null);
   
@@ -27,6 +37,15 @@ export default function UploadPage() {
     "Identificando montos y fechas...",
     "Casi terminamos...",
   ];
+
+  // Cargar lista de bancos disponibles
+  useEffect(() => {
+    getBanks()
+      .then(setBanks)
+      .catch((error) => {
+        console.error("Error cargando bancos:", error);
+      });
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -43,13 +62,19 @@ export default function UploadPage() {
     
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      processFile(files[0]);
+      setSelectedFile(files[0]);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      processFile(e.target.files[0]);
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const handleStartUpload = () => {
+    if (selectedFile) {
+      processFile(selectedFile, selectedBank || undefined);
     }
   };
 
@@ -135,7 +160,7 @@ export default function UploadPage() {
     };
   }, [isUploading, toast]);
 
-  const processFile = async (file: File) => {
+  const processFile = async (file: File, bank?: string) => {
     // Cancelar cualquier petición anterior solo si el usuario está en la misma página
     // No cancelar si el usuario navegó (permitir procesamiento en segundo plano)
     if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
@@ -189,7 +214,7 @@ export default function UploadPage() {
     try {
       // NO pasar signal para que el procesamiento continúe aunque el usuario navegue
       // El procesamiento en el servidor continuará y guardará los datos
-      const result = await uploadFile(file);
+      const result = await uploadFile(file, selectedBank || undefined);
       
       // Procesamiento completado exitosamente
       cleanup();
@@ -318,6 +343,66 @@ export default function UploadPage() {
                   </Button>
                 </label>
               </div>
+
+              {/* Mostrar archivo seleccionado y selector de banco */}
+              {selectedFile && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full max-w-md mt-6 space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-5 h-5 text-primary" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{selectedFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setSelectedBank('');
+                      }}
+                      className="text-muted-foreground hover:text-gray-900"
+                    >
+                      ✕
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Building2 className="w-4 h-4" />
+                      Banco (opcional - se detectará automáticamente si no seleccionas)
+                    </label>
+                    <Select value={selectedBank} onValueChange={setSelectedBank}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecciona un banco o déjalo en blanco para detección automática" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Detección automática</SelectItem>
+                        {banks.map((bank) => (
+                          <SelectItem key={bank.id} value={bank.id}>
+                            {bank.name} {bank.country && `(${bank.country})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    onClick={handleStartUpload}
+                    size="lg"
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    data-testid="button-upload"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Procesar archivo
+                  </Button>
+                </motion.div>
+              )}
             </motion.div>
           ) : (
             <motion.div 

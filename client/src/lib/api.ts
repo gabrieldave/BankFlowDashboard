@@ -7,7 +7,14 @@ export interface Transaction {
   category: string;
   merchant: string;
   currency?: string;
+  bank?: string;
   createdAt: Date;
+}
+
+export interface Bank {
+  id: string;
+  name: string;
+  country?: string;
 }
 
 export interface Stats {
@@ -32,9 +39,12 @@ export interface Stats {
   mostFrequentMerchant?: { name: string; count: number } | null;
 }
 
-export async function uploadFile(file: File, signal?: AbortSignal): Promise<{ message: string; count: number; duplicates?: number; skipped?: number; transactions: Transaction[]; alreadyProcessed?: boolean }> {
+export async function uploadFile(file: File, bank?: string, signal?: AbortSignal): Promise<{ message: string; count: number; duplicates?: number; skipped?: number; transactions: Transaction[]; alreadyProcessed?: boolean }> {
   const formData = new FormData();
   formData.append('file', file);
+  if (bank) {
+    formData.append('bank', bank);
+  }
 
   const response = await fetch('/api/upload', {
     method: 'POST',
@@ -46,6 +56,16 @@ export async function uploadFile(file: File, signal?: AbortSignal): Promise<{ me
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Error subiendo archivo');
+  }
+
+  return response.json();
+}
+
+export async function getBanks(): Promise<Bank[]> {
+  const response = await fetch('/api/banks');
+  
+  if (!response.ok) {
+    throw new Error('Error obteniendo bancos');
   }
 
   return response.json();
