@@ -234,7 +234,23 @@ export default function Dashboard() {
     );
   }
 
-  const categoryDataWithColors = stats.categoryData.map((cat, idx) => ({
+  // Si no hay transacciones, mostrar mensaje amigable
+  if (transactions.length === 0) {
+    return (
+      <div className="text-center space-y-4 py-12">
+        <h2 className="text-2xl font-heading font-bold">No hay transacciones</h2>
+        <p className="text-muted-foreground">Sube tu primer archivo para comenzar a visualizar tus finanzas.</p>
+        <Button 
+          onClick={() => window.location.href = '/'}
+          className="mt-4"
+        >
+          Subir archivo
+        </Button>
+      </div>
+    );
+  }
+
+  const categoryDataWithColors = (stats?.categoryData || []).map((cat, idx) => ({
     ...cat,
     color: CHART_COLORS[idx % CHART_COLORS.length]
   }));
@@ -252,6 +268,32 @@ export default function Dashboard() {
   };
 
   const defaultCurrency = getMostCommonCurrency();
+
+  // Calcular datos del gráfico según el modo de vista
+  const chartData = useMemo(() => {
+    if (!stats?.monthlyData || stats.monthlyData.length === 0) {
+      return [];
+    }
+    
+    if (viewMode === 'monthly') {
+      // Calcular acumulación mes a mes
+      let cumulativeBalance = 0;
+      return stats.monthlyData.map((month, idx) => {
+        cumulativeBalance += (month.income || 0) - (month.expense || 0);
+        return {
+          ...month,
+          cumulativeBalance: parseFloat(cumulativeBalance.toFixed(2)),
+          cumulativeIncome: idx === 0 
+            ? month.income 
+            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.income || 0), 0),
+          cumulativeExpense: idx === 0 
+            ? month.expense 
+            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.expense || 0), 0),
+        };
+      });
+    }
+    return stats.monthlyData;
+  }, [stats?.monthlyData, viewMode]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -282,12 +324,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard 
           title="Balance Total" 
-          amount={stats.totalBalance} 
-          trend={stats.balanceTrend !== undefined 
+          amount={stats?.totalBalance || 0} 
+          trend={stats?.balanceTrend !== undefined 
             ? `${stats.balanceTrend >= 0 ? '+' : ''}${stats.balanceTrend.toFixed(1)}%`
             : 'N/A'
           }
-          trendUp={stats.balanceTrend === undefined || stats.balanceTrend >= 0}
+          trendUp={stats?.balanceTrend === undefined || stats.balanceTrend >= 0}
           icon={Wallet}
           color="text-primary"
           bgColor="bg-blue-50"
@@ -296,7 +338,7 @@ export default function Dashboard() {
         />
         <SummaryCard 
           title="Ingresos" 
-          amount={stats.monthlyIncome} 
+          amount={stats?.monthlyIncome || 0} 
           trend="+12%" 
           trendUp={true}
           trendExplanation="Los ingresos aumentaron un 12% comparado con el mes anterior. Esto indica un crecimiento positivo en tus entradas de dinero."
@@ -308,7 +350,7 @@ export default function Dashboard() {
         />
         <SummaryCard 
           title="Gastos" 
-          amount={stats.monthlyExpenses} 
+          amount={stats?.monthlyExpenses || 0} 
           trend="-5%" 
           trendUp={false}
           trendExplanation="Los gastos disminuyeron un 5% comparado con el mes anterior. Esto es positivo ya que estás gastando menos."
@@ -320,11 +362,11 @@ export default function Dashboard() {
         />
         <SummaryCard 
           title="Tasa de Ahorro" 
-          amount={stats.savingsRate} 
+          amount={stats?.savingsRate || 0} 
           isPercent={true}
           trend="+4.2%" 
           trendUp={true}
-          trendExplanation={`Tu tasa de ahorro es del ${stats.savingsRate}%. Esto significa que ahorras ${stats.savingsRate}% de tus ingresos después de cubrir todos tus gastos.`}
+          trendExplanation={`Tu tasa de ahorro es del ${stats?.savingsRate || 0}%. Esto significa que ahorras ${stats?.savingsRate || 0}% de tus ingresos después de cubrir todos tus gastos.`}
           icon={TrendingUp}
           color="text-purple-600"
           bgColor="bg-purple-50"
@@ -360,26 +402,7 @@ export default function Dashboard() {
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
-                  data={useMemo(() => {
-                    if (viewMode === 'monthly' && stats.monthlyData.length > 0) {
-                      // Calcular acumulación mes a mes
-                      let cumulativeBalance = 0;
-                      return stats.monthlyData.map((month, idx) => {
-                        cumulativeBalance += (month.income || 0) - (month.expense || 0);
-                        return {
-                          ...month,
-                          cumulativeBalance: parseFloat(cumulativeBalance.toFixed(2)),
-                          cumulativeIncome: idx === 0 
-                            ? month.income 
-                            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.income || 0), 0),
-                          cumulativeExpense: idx === 0 
-                            ? month.expense 
-                            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.expense || 0), 0),
-                        };
-                      });
-                    }
-                    return stats.monthlyData;
-                  }, [stats.monthlyData, viewMode])} 
+                  data={chartData} 
                   margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                 >
                   <defs>
@@ -520,7 +543,7 @@ export default function Dashboard() {
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Total Gastos</p>
                   <p className="text-xl font-bold text-foreground">
-                    {formatCurrency(stats.monthlyExpenses, defaultCurrency)}
+                    {formatCurrency(stats?.monthlyExpenses || 0, defaultCurrency)}
                   </p>
                 </div>
               </div>
