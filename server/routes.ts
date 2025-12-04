@@ -119,29 +119,35 @@ export async function registerRoutes(
       if (!selectedBank) {
         // Intentar detectar automáticamente
         console.log("🔍 Detectando banco automáticamente...");
-        const fileName = req.file.originalname;
-        let firstPageText: string | undefined;
-        
-        // Para PDFs, intentar extraer texto de la primera página
-        if (fileType === "application/pdf" || fileName.toLowerCase().endsWith('.pdf')) {
-          try {
-            const { extractTextFromPDF } = await import('./pdf-vision-service');
-            const pages = await extractTextFromPDF(req.file.buffer);
-            if (pages.length > 0) {
-              firstPageText = pages[0].text;
+        try {
+          const fileName = req.file.originalname;
+          let firstPageText: string | undefined;
+          
+          // Para PDFs, intentar extraer texto de la primera página
+          if (fileType === "application/pdf" || fileName.toLowerCase().endsWith('.pdf')) {
+            try {
+              const { extractTextFromPDF } = await import('./pdf-vision-service');
+              const pages = await extractTextFromPDF(req.file.buffer);
+              if (pages.length > 0) {
+                firstPageText = pages[0].text;
+              }
+            } catch (e) {
+              console.warn("No se pudo extraer texto para detección de banco:", e);
             }
-          } catch (e) {
-            console.warn("No se pudo extraer texto para detección de banco:", e);
           }
-        }
-        
-        const detection = detectBank(fileName, undefined, firstPageText);
-        if (detection.bank && detection.confidence >= 30) {
-          selectedBank = detection.bank.id;
-          detectedBankInfo = detection.bank;
-          console.log(`✓ Banco detectado: ${detection.bank.name} (confianza: ${detection.confidence.toFixed(1)}%)`);
-        } else {
-          console.log("⚠️  No se pudo detectar el banco automáticamente");
+          
+          // Llamar a detectBank de forma segura
+          const detection = detectBank(fileName, undefined, firstPageText);
+          if (detection.bank && detection.confidence >= 30) {
+            selectedBank = detection.bank.id;
+            detectedBankInfo = detection.bank;
+            console.log(`✓ Banco detectado: ${detection.bank.name} (confianza: ${detection.confidence.toFixed(1)}%)`);
+          } else {
+            console.log("⚠️  No se pudo detectar el banco automáticamente");
+          }
+        } catch (detectionError: any) {
+          console.error("Error detectando banco:", detectionError);
+          console.log("⚠️  Continuando sin detección de banco");
         }
       } else {
         console.log(`✓ Banco seleccionado manualmente: ${selectedBank}`);
