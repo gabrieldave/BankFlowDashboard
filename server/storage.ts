@@ -208,19 +208,41 @@ export class PocketBaseStorage implements IStorage {
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
-    // Si ya hay una llamada en progreso, esperar a que termine
+    // Si ya hay una llamada en progreso, esperar a que termine (con timeout)
     if (this.getAllTransactionsPromise) {
-      return this.getAllTransactionsPromise;
+      try {
+        // Esperar máximo 60 segundos para que termine la llamada anterior
+        return await Promise.race([
+          this.getAllTransactionsPromise,
+          new Promise<Transaction[]>((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout esperando llamada anterior')), 60000)
+          )
+        ]);
+      } catch (error) {
+        // Si la llamada anterior falló o se colgó, limpiar el lock y continuar
+        console.warn('[getAllTransactions] Limpiando lock bloqueado:', error);
+        this.getAllTransactionsPromise = null;
+      }
     }
 
     // Crear la promesa y guardarla como lock
     this.getAllTransactionsPromise = this._getAllTransactionsInternal();
     
     try {
-      const result = await this.getAllTransactionsPromise;
+      // Agregar timeout global de 90 segundos para toda la operación
+      const result = await Promise.race([
+        this.getAllTransactionsPromise,
+        new Promise<Transaction[]>((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout obteniendo transacciones (90s)')), 90000)
+        )
+      ]);
       return result;
+    } catch (error: any) {
+      console.error('[getAllTransactions] Error con timeout:', error.message);
+      // Si hay error, devolver array vacío en lugar de fallar completamente
+      return [];
     } finally {
-      // Limpiar el lock después de completar
+      // SIEMPRE limpiar el lock después de completar (incluso si hay error)
       this.getAllTransactionsPromise = null;
     }
   }
@@ -249,6 +271,27 @@ export class PocketBaseStorage implements IStorage {
     // Helper para esperar un poco antes de reintentar
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
+    // Helper para agregar timeout a operaciones de PocketBase
+    const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> => {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout en ${operation} después de ${timeoutMs}ms`)), timeoutMs)
+        )
+      ]);
+    };
+    
+    // Helper para crear AbortSignal con timeout (compatible con versiones antiguas de Node.js)
+    const createTimeoutSignal = (timeoutMs: number): AbortSignal => {
+      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+        return AbortSignal.timeout(timeoutMs);
+      }
+      // Fallback para versiones antiguas de Node.js
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), timeoutMs);
+      return controller.signal;
+    };
+    
     // Try different sort options, falling back if one fails
     let records: any[] = [];
     let lastError: any = null;
@@ -256,10 +299,9 @@ export class PocketBaseStorage implements IStorage {
     
     // Usar getList con paginación directamente - getFullList puede devolver solo metadata
     // Intentar con diferentes estrategias de ordenamiento usando getList
+    // Limitar a solo 2 estrategias para evitar loops largos
     const strategies = [
       { name: '-id', sort: '-id' },
-      { name: 'id', sort: 'id' },
-      { name: '-created', sort: '-created' },
       { name: 'no sort', sort: '' },
     ];
 
@@ -275,13 +317,19 @@ export class PocketBaseStorage implements IStorage {
         while (hasMore && consecutiveErrors < maxConsecutiveErrors) {
           try {
             await wait(50); // Delay entre páginas
+            
+            // Agregar timeout de 15 segundos por página
             // Intentar obtener sin fields primero (PocketBase puede tener problemas con fields)
             let result;
             try {
-              result = await this.pb.collection('transactions').getList(page, 500, {
-                sort: strategy.sort || undefined,
-                expand: '',
-              });
+              result = await withTimeout(
+                this.pb.collection('transactions').getList(page, 500, {
+                  sort: strategy.sort || undefined,
+                  expand: '',
+                }),
+                15000,
+                `getList página ${page}`
+              );
               
               // Si solo viene metadata, intentar con fields
               if (result.items && result.items.length > 0) {
@@ -289,20 +337,28 @@ export class PocketBaseStorage implements IStorage {
                 const hasDataFields = firstItem.date !== undefined || firstItem.description !== undefined || firstItem.amount !== undefined;
                 if (!hasDataFields) {
                   console.warn(`[getAllTransactions] getList sin fields devolvió solo metadata, intentando con fields...`);
-                  result = await this.pb.collection('transactions').getList(page, 500, {
-                    sort: strategy.sort || undefined,
-                    fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
-                    expand: '',
-                  });
+                  result = await withTimeout(
+                    this.pb.collection('transactions').getList(page, 500, {
+                      sort: strategy.sort || undefined,
+                      fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
+                      expand: '',
+                    }),
+                    15000,
+                    `getList página ${page} con fields`
+                  );
                 }
               }
             } catch (fieldsError: any) {
               // Si falla con fields, intentar sin fields
               console.warn(`[getAllTransactions] Error con fields, intentando sin fields:`, fieldsError.message);
-              result = await this.pb.collection('transactions').getList(page, 500, {
-                sort: strategy.sort || undefined,
-                expand: '',
-              });
+              result = await withTimeout(
+                this.pb.collection('transactions').getList(page, 500, {
+                  sort: strategy.sort || undefined,
+                  expand: '',
+                }),
+                15000,
+                `getList página ${page} sin fields (fallback)`
+              );
             }
             
             if (result.items && result.items.length > 0) {
@@ -315,9 +371,14 @@ export class PocketBaseStorage implements IStorage {
                 console.warn(`[getAllTransactions] Los items solo tienen metadata (página ${page}), obteniendo campos individualmente...`);
                 console.log(`[getAllTransactions] Primer item (solo metadata):`, JSON.stringify(firstItem));
                 // Si solo tiene metadata, obtener cada registro individualmente
+                // LIMITAR a máximo 100 registros por página para evitar timeouts
+                const itemsToExpand = result.items.slice(0, 100);
+                console.warn(`[getAllTransactions] Expandiendo ${itemsToExpand.length} registros (limitado de ${result.items.length})`);
+                
                 const expandedItems = await Promise.all(
-                  result.items.map(async (item: any, idx: number) => {
+                  itemsToExpand.map(async (item: any, idx: number) => {
                     try {
+                      // Agregar timeout de 5 segundos por registro individual
                       // Intentar obtener con campos específicos usando la API REST directamente
                       let apiUrl = process.env.POCKETBASE_URL?.trim() || '';
                       // Asegurar que la URL no tenga /_/ para la API REST
@@ -331,11 +392,14 @@ export class PocketBaseStorage implements IStorage {
                       
                       if (apiUrl && token) {
                         try {
-                          const response = await fetch(`${apiUrl}api/collections/transactions/records/${item.id}?fields=id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated`, {
+                          const fetchPromise = fetch(`${apiUrl}api/collections/transactions/records/${item.id}?fields=id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated`, {
                             headers: {
                               'Authorization': `Bearer ${token}`,
                             },
+                            signal: createTimeoutSignal(5000), // Timeout de 5 segundos
                           });
+                          
+                          const response = await fetchPromise;
                           
                           if (response.ok) {
                             const fullRecord = await response.json();
@@ -352,6 +416,7 @@ export class PocketBaseStorage implements IStorage {
                                 headers: {
                                   'Authorization': `Bearer ${token}`,
                                 },
+                                signal: createTimeoutSignal(5000), // Timeout de 5 segundos
                               });
                               if (response2.ok) {
                                 const fullRecord2 = await response2.json();
@@ -369,9 +434,13 @@ export class PocketBaseStorage implements IStorage {
                       
                       // Fallback al método SDK con fields explícitos
                       try {
-                        const fullRecord = await this.pb.collection('transactions').getOne(item.id, {
-                          fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
-                        });
+                        const fullRecord = await withTimeout(
+                          this.pb.collection('transactions').getOne(item.id, {
+                            fields: 'id,date,description,amount,type,category,merchant,currency,bank,id_number,created,updated',
+                          }),
+                          5000,
+                          `getOne registro ${item.id}`
+                        );
                         if (idx === 0) {
                           console.log(`[getAllTransactions] Primer registro expandido (SDK):`, JSON.stringify(fullRecord));
                         }
@@ -383,6 +452,7 @@ export class PocketBaseStorage implements IStorage {
                               headers: {
                                 'Authorization': `Bearer ${token}`,
                               },
+                              signal: AbortSignal.timeout(5000), // Timeout de 5 segundos
                             });
                             if (response2.ok) {
                               const fullRecord2 = await response2.json();
@@ -402,6 +472,7 @@ export class PocketBaseStorage implements IStorage {
                             headers: {
                               'Authorization': `Bearer ${token}`,
                             },
+                            signal: AbortSignal.timeout(5000), // Timeout de 5 segundos
                           });
                           if (response3.ok) {
                             return await response3.json();
@@ -464,6 +535,8 @@ export class PocketBaseStorage implements IStorage {
     // Si todas las estrategias fallaron
     if (!strategySuccess || records.length === 0) {
       console.warn(`⚠ No se pudieron obtener transacciones después de intentar todas las estrategias. Último error: ${lastError?.message || 'N/A'}`);
+      // Devolver array vacío en lugar de fallar completamente
+      return [];
     }
     
     // Log para diagnóstico
