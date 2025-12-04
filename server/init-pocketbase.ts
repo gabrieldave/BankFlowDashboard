@@ -58,7 +58,20 @@ async function authenticateAdmin(): Promise<string> {
   }
 
   try {
-    const response = await fetch(`${POCKETBASE_URL}/api/admins/auth-with-password`, fetchOptions);
+    // Ajustar URL para la API (remover /_/ si existe, la API está en la raíz)
+    // Exactamente como en storage.ts
+    let apiUrl = POCKETBASE_URL.trim();
+    if (apiUrl.endsWith("/_/")) {
+      apiUrl = apiUrl.slice(0, -3) + "/"; // Remover "/_/" y agregar "/"
+    } else if (!apiUrl.endsWith("/")) {
+      apiUrl += "/";
+    }
+
+    // El endpoint correcto de PocketBase para autenticación de admin
+    const endpoint = "api/admins/auth-with-password";
+    const authUrl = apiUrl + endpoint;
+    console.log(`Intentando autenticación en: ${authUrl}`);
+    const response = await fetch(authUrl, fetchOptions);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -141,15 +154,62 @@ async function main() {
     console.log("📦 Creando colecciones...\n");
 
     // Colección de usuarios (tipo auth para autenticación)
-    await createCollection(
-      token,
-      "users",
-      [
-        { name: "username", type: "text", required: true, options: { unique: true } },
-        { name: "password", type: "text", required: true },
+    // Crear con configuración completa para autenticación
+    const usersCollectionData = {
+      name: "users",
+      type: "auth",
+      schema: [
+        {
+          name: "name",
+          type: "text",
+          required: false,
+        },
+        {
+          name: "avatar",
+          type: "file",
+          required: false,
+          options: {
+            maxSelect: 1,
+            maxSize: 5242880, // 5MB
+            mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          },
+        },
       ],
-      "auth"
-    );
+      options: {
+        allowEmailAuth: true,
+        allowOAuth2Auth: false,
+        allowUsernameAuth: false,
+        exceptEmailDomains: [],
+        onlyEmailDomains: [],
+        requireEmail: true,
+        minPasswordLength: 8,
+      },
+      listRule: "",
+      viewRule: "id = @request.auth.id",
+      createRule: "",
+      updateRule: "id = @request.auth.id",
+      deleteRule: "id = @request.auth.id",
+    };
+
+    const usersResponse = await fetch(`${POCKETBASE_URL}/api/collections`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(usersCollectionData),
+    });
+
+    if (!usersResponse.ok) {
+      const error = await usersResponse.json();
+      if (error.message?.includes("already exists") || usersResponse.status === 400) {
+        console.log(`✓ Colección "users" ya existe`);
+      } else {
+        throw new Error(`Error creando colección users: ${error.message || usersResponse.statusText}`);
+      }
+    } else {
+      console.log(`✓ Colección "users" creada exitosamente`);
+    }
 
     // Colección de transacciones
     await createCollection(

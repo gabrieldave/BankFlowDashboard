@@ -49,7 +49,21 @@ async function authenticateAdmin(): Promise<string> {
   }
 
   try {
-    const response = await fetch(`${POCKETBASE_URL}/api/admins/auth-with-password`, fetchOptions);
+    // Ajustar URL para la API (remover /_/ si existe, la API está en la raíz)
+    // Exactamente como en storage.ts línea 133-137
+    let apiUrl = POCKETBASE_URL.trim();
+    if (apiUrl.endsWith("/_/")) {
+      apiUrl = apiUrl.slice(0, -3) + "/"; // Remover "/_/" y agregar "/"
+    } else if (apiUrl.endsWith("/_")) {
+      apiUrl = apiUrl.slice(0, -2) + "/"; // Remover "/_" y agregar "/"
+    } else if (!apiUrl.endsWith("/")) {
+      apiUrl += "/";
+    }
+    
+    const endpoint = "api/admins/auth-with-password";
+    const authUrl = `${apiUrl}${endpoint}`;
+    console.log(`Intentando autenticación en: ${authUrl}`);
+    const response = await fetch(authUrl, fetchOptions);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -80,15 +94,9 @@ async function authenticateAdmin(): Promise<string> {
 }
 
 async function createUsersCollection(token: string) {
-  // Ajustar URL para la API
-  let apiUrl = POCKETBASE_URL;
-  if (apiUrl.endsWith("/_/")) {
-    apiUrl = apiUrl.replace("/_/", "/");
-  }
-
   // Verificar si la colección ya existe
   try {
-    const checkResponse = await fetch(`${apiUrl}/api/collections/users`, {
+    const checkResponse = await fetch(`${POCKETBASE_URL}/api/collections/users`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -141,7 +149,8 @@ async function createUsersCollection(token: string) {
     deleteRule: "id = @request.auth.id",
   };
 
-  const response = await fetch(`${apiUrl}/api/collections`, {
+  // Usar la URL exacta como en init-pocketbase.ts
+  const response = await fetch(`${POCKETBASE_URL}/api/collections`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
