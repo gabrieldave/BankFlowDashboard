@@ -98,12 +98,17 @@ export default function Dashboard() {
   const deferredFilterWeek = useDeferredValue(filterWeek);
   const deferredFilterBank = useDeferredValue(filterBank);
 
+  // Usar length como dependencia estable para evitar re-renders innecesarios
+  // Solo recalcular cuando cambie el número de transacciones, no la referencia del array
+  const transactionsLength = transactions?.length ?? 0;
+  const transactionsArray = transactions && Array.isArray(transactions) ? transactions : [];
+
   // Obtener categorías únicas para el filtro (optimizado)
   const availableCategories = useMemo(() => {
-    if (!transactions || transactions.length === 0) return [];
+    if (transactionsLength === 0 || !transactionsArray.length) return [];
     try {
       const categories = new Set<string>();
-      transactions.forEach(t => {
+      transactionsArray.forEach(t => {
         if (t?.category) {
           categories.add(t.category);
         }
@@ -113,14 +118,14 @@ export default function Dashboard() {
       console.error('Error calculando categorías:', error);
       return [];
     }
-  }, [transactions]);
+  }, [transactionsLength, transactionsArray]);
 
   // Obtener meses únicos disponibles en las transacciones (optimizado)
   const availableMonths = useMemo(() => {
-    if (!transactions || transactions.length === 0) return [];
+    if (transactionsLength === 0 || !transactionsArray.length) return [];
     try {
       const monthMap = new Map<string, string>();
-      transactions.forEach(t => {
+      transactionsArray.forEach(t => {
         try {
           if (!t?.date) return;
           const date = new Date(t.date);
@@ -142,14 +147,14 @@ export default function Dashboard() {
       console.error('Error calculando meses:', error);
       return [];
     }
-  }, [transactions]);
+  }, [transactionsLength, transactionsArray]);
 
   // Obtener semanas disponibles (optimizado)
   const availableWeeks = useMemo(() => {
-    if (!transactions || transactions.length === 0) return [];
+    if (transactionsLength === 0 || !transactionsArray.length) return [];
     try {
       const weekMap = new Map<string, string>();
-      transactions.forEach(t => {
+      transactionsArray.forEach(t => {
         try {
           if (!t?.date) return;
           const date = new Date(t.date);
@@ -173,14 +178,14 @@ export default function Dashboard() {
       console.error('Error calculando semanas:', error);
       return [];
     }
-  }, [transactions]);
+  }, [transactionsLength, transactionsArray]);
 
   // Obtener bancos únicos disponibles (optimizado)
   const availableBanks = useMemo(() => {
-    if (!transactions || transactions.length === 0) return [];
+    if (transactionsLength === 0 || !transactionsArray.length) return [];
     try {
       const bankSet = new Set<string>();
-      transactions.forEach(t => {
+      transactionsArray.forEach(t => {
         if (t?.bank && typeof t.bank === 'string' && t.bank.trim()) {
           bankSet.add(t.bank.trim());
         }
@@ -190,14 +195,14 @@ export default function Dashboard() {
       console.error('Error calculando bancos:', error);
       return [];
     }
-  }, [transactions]);
+  }, [transactionsLength, transactionsArray]);
 
   // Filtrar y ordenar transacciones (optimizado con manejo de errores y deferred values)
   const filteredTransactions = useMemo(() => {
-    if (!transactions || transactions.length === 0) return [];
+    if (transactionsLength === 0 || !transactionsArray.length) return [];
     
     try {
-      let filtered = [...transactions];
+      let filtered = [...transactionsArray];
       
       // Filtrar por tipo
       if (deferredFilterType !== 'all') {
@@ -277,7 +282,7 @@ export default function Dashboard() {
       console.error('Error filtrando transacciones:', error);
       return [];
     }
-  }, [transactions, deferredSearchQuery, deferredFilterType, deferredFilterCategory, deferredFilterMonth, deferredFilterWeek, deferredFilterBank]);
+  }, [transactionsLength, transactionsArray, deferredSearchQuery, deferredFilterType, deferredFilterCategory, deferredFilterMonth, deferredFilterWeek, deferredFilterBank]);
 
   // Mostrar estado de carga con skeleton - solo si realmente está cargando y no hay datos
   const isLoading = (loadingTransactions || loadingStats) && !transactions && !stats;
@@ -432,10 +437,10 @@ export default function Dashboard() {
 
   // Obtener la moneda más común de las transacciones, o usar MXN por defecto (optimizado)
   const defaultCurrency = useMemo(() => {
-    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return 'MXN';
+    if (transactionsLength === 0 || !transactionsArray.length) return 'MXN';
     try {
       const currencyCounts: Record<string, number> = {};
-      transactions.forEach(t => {
+      transactionsArray.forEach(t => {
         if (t && typeof t === 'object') {
           const currency = t.currency || 'MXN';
           currencyCounts[currency] = (currencyCounts[currency] || 0) + 1;
@@ -447,7 +452,7 @@ export default function Dashboard() {
       console.error('Error calculando moneda por defecto:', error);
       return 'MXN';
     }
-  }, [transactions]);
+  }, [transactionsLength, transactionsArray]);
 
   // Preparar datos de categorías con colores (optimizado)
   const categoryDataWithColors = useMemo(() => {
