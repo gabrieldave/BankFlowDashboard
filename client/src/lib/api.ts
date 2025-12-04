@@ -32,7 +32,7 @@ export interface Stats {
   mostFrequentMerchant?: { name: string; count: number } | null;
 }
 
-export async function uploadFile(file: File, signal?: AbortSignal): Promise<{ message: string; count: number; transactions: Transaction[] }> {
+export async function uploadFile(file: File, signal?: AbortSignal): Promise<{ message: string; count: number; duplicates?: number; skipped?: number; transactions: Transaction[] }> {
   const formData = new FormData();
   formData.append('file', file);
 

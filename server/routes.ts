@@ -68,19 +68,19 @@ export async function registerRoutes(
       }
 
       // Detectar y filtrar duplicados antes de guardar
-      const { saved, duplicates, skipped } = await storage.createTransactions(validTransactions);
+      const result = await storage.createTransactions(validTransactions);
 
-      let message = `${saved.length} transacciones importadas correctamente`;
-      if (duplicates > 0) {
-        message += `. ${duplicates} duplicadas omitidas`;
+      let message = `${result.saved.length} transacciones importadas correctamente`;
+      if (result.duplicates > 0) {
+        message += `. ${result.duplicates} duplicadas omitidas`;
       }
 
       res.json({
         message,
-        count: saved.length,
-        duplicates,
-        skipped,
-        transactions: saved,
+        count: result.saved.length,
+        duplicates: result.duplicates,
+        skipped: result.skipped,
+        transactions: result.saved,
       });
     } catch (error: any) {
       console.error("Error procesando archivo:", error);

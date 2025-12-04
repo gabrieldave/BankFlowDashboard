@@ -112,9 +112,13 @@ export default function UploadPage() {
 
         setTimeout(() => {
           if (!abortController.signal.aborted) {
+            let description = result.message;
+            if (result.duplicates && result.duplicates > 0) {
+              description += ` (${result.duplicates} duplicadas omitidas)`;
+            }
             toast({
               title: "¡Archivo procesado!",
-              description: result.message,
+              description,
             });
             setLocation("/dashboard");
           }

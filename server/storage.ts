@@ -9,7 +9,7 @@ export interface IStorage {
   getAllTransactions(): Promise<Transaction[]>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
-  createTransactions(transactions: InsertTransaction[]): Promise<Transaction[]>;
+  createTransactions(transactions: InsertTransaction[]): Promise<{ saved: Transaction[]; duplicates: number; skipped: number }>;
   updateTransaction(id: number, updates: Partial<InsertTransaction>): Promise<Transaction>;
   deleteTransaction(id: number): Promise<void>;
   deleteAllTransactions(): Promise<void>;
@@ -64,13 +64,14 @@ export class MemStorage implements IStorage {
     return newTransaction;
   }
 
-  async createTransactions(transactionsToInsert: InsertTransaction[]): Promise<Transaction[]> {
+  async createTransactions(transactionsToInsert: InsertTransaction[]): Promise<{ saved: Transaction[]; duplicates: number; skipped: number }> {
+    // Para MemStorage, simplemente insertamos todas (no hay persistencia, así que no hay duplicados reales)
     const results: Transaction[] = [];
     for (const transaction of transactionsToInsert) {
       const result = await this.createTransaction(transaction);
       results.push(result);
     }
-    return results;
+    return { saved: results, duplicates: 0, skipped: 0 };
   }
 
   async updateTransaction(id: number, updates: Partial<InsertTransaction>): Promise<Transaction> {
