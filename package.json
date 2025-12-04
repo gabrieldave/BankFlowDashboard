@@ -16,7 +16,8 @@
     "init-pocketbase": "tsx server/init-pocketbase.ts",
     "init-pocketbase-sdk": "tsx server/init-pocketbase-sdk.ts",
     "init-users-collection": "tsx server/init-users-collection.ts",
-    "diagnostico-pocketbase": "tsx server/diagnostico-pocketbase.ts"
+    "diagnostico-pocketbase": "tsx server/diagnostico-pocketbase.ts",
+    "limpiar-datos": "tsx server/limpiar-datos-prueba.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
