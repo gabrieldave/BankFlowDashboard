@@ -6,12 +6,14 @@ import {
   Settings, 
   LogOut, 
   Menu,
-  X
+  X,
+  Loader2
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +26,36 @@ import {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const { user, logout } = useAuth();
+
+  // Verificar si hay una carga en progreso
+  useEffect(() => {
+    const checkUploadStatus = () => {
+      const uploadInProgress = localStorage.getItem('uploadInProgress');
+      setIsUploading(uploadInProgress === 'true');
+    };
+
+    // Verificar al montar
+    checkUploadStatus();
+
+    // Verificar periódicamente
+    const interval = setInterval(checkUploadStatus, 1000);
+
+    // Escuchar cambios en localStorage
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'uploadInProgress') {
+        setIsUploading(e.newValue === 'true');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
 
   const getInitials = (name?: string, email?: string) => {
     if (name) {
@@ -46,10 +77,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const initials = getInitials(user?.name, user?.email);
 
   const navItems = [
-    { href: "/", icon: UploadCloud, label: "Subir Archivos" },
-    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { href: "/analytics", icon: PieChart, label: "Análisis" }, // Placeholder
-    { href: "/settings", icon: Settings, label: "Configuración" }, // Placeholder
+    { href: "/", icon: UploadCloud, label: "Subir Archivos", disabled: false },
+    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", disabled: isUploading },
+    { href: "/analytics", icon: PieChart, label: "Análisis", disabled: isUploading },
+    { href: "/settings", icon: Settings, label: "Configuración", disabled: false },
   ];
 
   return (
@@ -81,22 +112,67 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="space-y-2 flex-1">
-            {navItems.map((item) => {
-              const isActive = location === item.href;
-              return (
-                <Link key={item.href} href={item.href}>
-                  <div className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group cursor-pointer",
-                    isActive 
-                      ? "bg-primary text-white shadow-md shadow-primary/20" 
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  )}>
-                    <item.icon className={cn("h-5 w-5", isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground")} />
+            <TooltipProvider>
+              {navItems.map((item) => {
+                const isActive = location === item.href;
+                const isDisabled = item.disabled;
+                
+                const navItem = (
+                  <div 
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group",
+                      isActive 
+                        ? "bg-primary text-white shadow-md shadow-primary/20" 
+                        : isDisabled
+                        ? "text-muted-foreground/50 cursor-not-allowed opacity-50"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
+                    )}
+                    onClick={(e) => {
+                      if (isDisabled) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }
+                    }}
+                  >
+                    {isDisabled && isUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <item.icon className={cn(
+                        "h-5 w-5", 
+                        isActive ? "text-white" : isDisabled 
+                          ? "text-muted-foreground/50" 
+                          : "text-muted-foreground group-hover:text-foreground"
+                      )} />
+                    )}
                     <span className="font-medium">{item.label}</span>
+                    {isDisabled && (
+                      <span className="ml-auto text-xs text-muted-foreground/70">
+                        (Cargando...)
+                      </span>
+                    )}
                   </div>
-                </Link>
-              );
-            })}
+                );
+
+                if (isDisabled) {
+                  return (
+                    <Tooltip key={item.href}>
+                      <TooltipTrigger asChild>
+                        <div>{navItem}</div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Espera a que termine la carga del archivo para acceder a {item.label}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                return (
+                  <Link key={item.href} href={item.href}>
+                    {navItem}
+                  </Link>
+                );
+              })}
+            </TooltipProvider>
           </nav>
 
           <div className="pt-6 border-t mt-auto">

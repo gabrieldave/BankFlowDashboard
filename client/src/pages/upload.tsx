@@ -257,6 +257,11 @@ export default function UploadPage() {
         
         // Esperar un momento antes de redirigir
         setTimeout(() => {
+          toast({
+            title: "✅ Ya puedes ver el Dashboard",
+            description: "El procesamiento ha terminado. Puedes acceder al Dashboard ahora.",
+            duration: 5000,
+          });
           setLocation("/dashboard");
         }, 2000);
       } else {
@@ -267,8 +272,9 @@ export default function UploadPage() {
             description += ` (${result.duplicates} duplicadas omitidas)`;
           }
           toast({
-            title: "¡Archivo procesado!",
-            description,
+            title: "✅ ¡Archivo procesado! Ya puedes ver el Dashboard",
+            description: description + " Puedes acceder al Dashboard ahora.",
+            duration: 5000,
           });
           setLocation("/dashboard");
         }, 1000);

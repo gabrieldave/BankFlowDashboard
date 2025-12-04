@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo, useDeferredValue, startTransition } from "react";
+import { useState, useMemo, useDeferredValue } from "react";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -70,14 +70,6 @@ export default function Dashboard() {
   const [filterBank, setFilterBank] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'all' | 'monthly' | 'weekly'>('all');
   
-  // Usar deferred values para evitar bloqueos en el UI
-  const deferredSearchQuery = useDeferredValue(searchQuery);
-  const deferredFilterType = useDeferredValue(filterType);
-  const deferredFilterCategory = useDeferredValue(filterCategory);
-  const deferredFilterMonth = useDeferredValue(filterMonth);
-  const deferredFilterWeek = useDeferredValue(filterWeek);
-  const deferredFilterBank = useDeferredValue(filterBank);
-  
   const { data: transactions, isLoading: loadingTransactions, error: transactionsError } = useQuery({
     queryKey: ['transactions'],
     queryFn: getTransactions,
@@ -91,6 +83,14 @@ export default function Dashboard() {
     retry: 2,
     staleTime: 30000, // Cache por 30 segundos
   });
+
+  // Usar deferred values para evitar bloqueos en el UI
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const deferredFilterType = useDeferredValue(filterType);
+  const deferredFilterCategory = useDeferredValue(filterCategory);
+  const deferredFilterMonth = useDeferredValue(filterMonth);
+  const deferredFilterWeek = useDeferredValue(filterWeek);
+  const deferredFilterBank = useDeferredValue(filterBank);
 
   // Obtener categorías únicas para el filtro (optimizado)
   const availableCategories = useMemo(() => {
@@ -372,7 +372,7 @@ export default function Dashboard() {
   }
 
   // Si no hay transacciones, mostrar mensaje amigable
-  if (transactions.length === 0) {
+  if (!Array.isArray(transactions) || transactions.length === 0) {
     return (
       <div className="text-center space-y-4 py-12">
         <h2 className="text-2xl font-heading font-bold">No hay transacciones</h2>
@@ -406,30 +406,37 @@ export default function Dashboard() {
 
   const defaultCurrency = getMostCommonCurrency();
 
-  // Calcular datos del gráfico según el modo de vista
+  // Calcular datos del gráfico según el modo de vista (optimizado)
   const chartData = useMemo(() => {
-    if (!stats?.monthlyData || stats.monthlyData.length === 0) {
+    if (!stats?.monthlyData || !Array.isArray(stats.monthlyData) || stats.monthlyData.length === 0) {
       return [];
     }
     
-    if (viewMode === 'monthly') {
-      // Calcular acumulación mes a mes
-      let cumulativeBalance = 0;
-      return stats.monthlyData.map((month, idx) => {
-        cumulativeBalance += (month.income || 0) - (month.expense || 0);
-        return {
-          ...month,
-          cumulativeBalance: parseFloat(cumulativeBalance.toFixed(2)),
-          cumulativeIncome: idx === 0 
-            ? month.income 
-            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.income || 0), 0),
-          cumulativeExpense: idx === 0 
-            ? month.expense 
-            : stats.monthlyData.slice(0, idx + 1).reduce((sum, m) => sum + (m.expense || 0), 0),
-        };
-      });
+    try {
+      if (viewMode === 'monthly') {
+        // Calcular acumulación mes a mes (optimizado)
+        let cumulativeBalance = 0;
+        let cumulativeIncome = 0;
+        let cumulativeExpense = 0;
+        
+        return stats.monthlyData.map((month, idx) => {
+          cumulativeIncome += (month.income || 0);
+          cumulativeExpense += (month.expense || 0);
+          cumulativeBalance = cumulativeIncome - cumulativeExpense;
+          
+          return {
+            ...month,
+            cumulativeBalance: parseFloat(cumulativeBalance.toFixed(2)),
+            cumulativeIncome: parseFloat(cumulativeIncome.toFixed(2)),
+            cumulativeExpense: parseFloat(cumulativeExpense.toFixed(2)),
+          };
+        });
+      }
+      return stats.monthlyData;
+    } catch (error) {
+      console.error('Error calculando datos del gráfico:', error);
+      return [];
     }
-    return stats.monthlyData;
   }, [stats?.monthlyData, viewMode]);
 
   return (
