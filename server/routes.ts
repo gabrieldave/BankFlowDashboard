@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
-import { storage } from "./storage";
+import { storage, PocketBaseStorage } from "./storage";
 import multer from "multer";
 import { parseCSV, parsePDF } from "./file-processors";
 import { insertTransactionSchema } from "@shared/schema";
@@ -207,6 +207,96 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error obteniendo transacciones:", error);
       res.status(500).json({ error: "Error obteniendo transacciones" });
+    }
+  });
+
+  // Endpoint para verificar estado de transacciones en PocketBase
+  app.get("/api/transactions/status", async (req, res) => {
+    try {
+      const transactions = await storage.getAllTransactions();
+      const total = transactions.length;
+      const income = transactions.filter(t => t.type === 'income').length;
+      const expense = transactions.filter(t => t.type === 'expense').length;
+      
+      // Obtener fechas de las transacciones más recientes
+      const recentTransactions = transactions
+        .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime())
+        .slice(0, 5);
+      
+      res.json({
+        total,
+        income,
+        expense,
+        recentTransactions: recentTransactions.map(t => ({
+          id: t.id,
+          date: t.date,
+          description: t.description?.substring(0, 50),
+          amount: t.amount,
+          type: t.type,
+          createdAt: t.createdAt
+        })),
+        message: total > 0 
+          ? `Hay ${total} transacciones guardadas en PocketBase (${income} ingresos, ${expense} gastos)`
+          : "No hay transacciones guardadas en PocketBase"
+      });
+    } catch (error: any) {
+      console.error("Error verificando estado de transacciones:", error);
+      res.status(500).json({ 
+        error: "Error verificando estado de transacciones",
+        details: error.message 
+      });
+    }
+  });
+
+  // Endpoint para obtener transacciones directamente desde PocketBase (bypass del storage)
+  app.get("/api/transactions/raw", async (req, res) => {
+    try {
+      // Solo funciona con PocketBaseStorage
+      if (!(storage instanceof PocketBaseStorage)) {
+        return res.status(400).json({ error: "Este endpoint solo funciona con PocketBase" });
+      }
+
+      const pb = (storage as any).pb;
+      await (storage as any).ensureAuth();
+      
+      let records: any[] = [];
+      let page = 1;
+      let hasMore = true;
+      
+      while (hasMore) {
+        try {
+          const result = await pb.collection('transactions').getList(page, 500);
+          records.push(...(result.items || []));
+          hasMore = result.items && result.items.length === 500;
+          page++;
+        } catch (error: any) {
+          console.error(`Error obteniendo página ${page}:`, error.message);
+          hasMore = false;
+        }
+      }
+      
+      res.json({
+        total: records.length,
+        records: records.map((item: any) => ({
+          id: item.id,
+          id_number: item.id_number,
+          date: item.date,
+          description: item.description,
+          amount: item.amount,
+          type: item.type,
+          category: item.category,
+          merchant: item.merchant,
+          currency: item.currency,
+          created: item.created,
+          updated: item.updated
+        }))
+      });
+    } catch (error: any) {
+      console.error("Error obteniendo transacciones raw:", error);
+      res.status(500).json({ 
+        error: "Error obteniendo transacciones raw",
+        details: error.message 
+      });
     }
   });
 
