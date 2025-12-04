@@ -130,6 +130,12 @@ export class PocketBaseStorage implements IStorage {
         process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
       }
 
+      // Ajustar URL para la API (remover /_/ si existe, la API está en la raíz)
+      let apiUrl = this.baseUrl;
+      if (apiUrl.endsWith("/_/")) {
+        apiUrl = apiUrl.replace("/_/", "/");
+      }
+
       // Intentar diferentes endpoints de autenticación
       const authEndpoints = [
         "/api/admins/auth-with-password",
@@ -139,7 +145,7 @@ export class PocketBaseStorage implements IStorage {
 
       for (const endpoint of authEndpoints) {
         try {
-          const response = await fetch(`${this.baseUrl}${endpoint}`, {
+          const response = await fetch(`${apiUrl}${endpoint}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -151,9 +157,14 @@ export class PocketBaseStorage implements IStorage {
           if (response.ok) {
             const data = await response.json();
             this.adminToken = data.token;
+            console.log("✓ Autenticación exitosa como admin");
             return;
+          } else {
+            const errorText = await response.text();
+            console.warn(`Endpoint ${endpoint} falló: ${response.status} - ${errorText.substring(0, 100)}`);
           }
-        } catch (e) {
+        } catch (e: any) {
+          console.warn(`Error en endpoint ${endpoint}:`, e.message);
           // Continuar con el siguiente endpoint
         }
       }
