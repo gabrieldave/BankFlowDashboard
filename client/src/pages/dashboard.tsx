@@ -26,7 +26,9 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  Legend,
+  BarChart,
+  Bar
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -904,112 +906,109 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart 
-                  data={chartData} 
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(0 84.2% 60.2%)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(0 84.2% 60.2%)" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(221 83% 53%)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(221 83% 53%)" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                  <XAxis 
-                    dataKey="name" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#6b7280', fontSize: 12 }}
-                    dy={10}
-                  />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#6b7280', fontSize: 12 }}
-                    domain={['auto', 'auto']}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'white', 
-                      borderRadius: '8px', 
-                      border: '1px solid #e5e7eb',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
-                    }}
-                    formatter={tooltipFormatter}
-                  />
-                  <Legend />
-                  {viewMode === 'monthly' ? (
-                    <>
-                      <Area 
-                        type="monotone" 
-                        dataKey="cumulativeBalance" 
-                        stroke="hsl(221 83% 53%)" 
-                        strokeWidth={2}
-                        fillOpacity={1} 
-                        fill="url(#colorBalance)"
-                        name="Balance Acumulado"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="cumulativeIncome" 
-                        stroke="hsl(142 76% 36%)" 
-                        strokeWidth={2}
-                        fillOpacity={0.2} 
-                        fill="url(#colorIncome)"
-                        name="Ingresos Acumulados"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="cumulativeExpense" 
-                        stroke="hsl(0 84.2% 60.2%)" 
-                        strokeWidth={2}
-                        fillOpacity={0.2} 
-                        fill="url(#colorExpense)"
-                        name="Gastos Acumulados"
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <Area 
-                        type="monotone" 
-                        dataKey="income" 
-                        stroke="hsl(142 76% 36%)" 
-                        strokeWidth={2}
-                        fillOpacity={1} 
-                        fill="url(#colorIncome)"
-                        name="Ingresos"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="expense" 
-                        stroke="hsl(0 84.2% 60.2%)" 
-                        strokeWidth={2}
-                        fillOpacity={1} 
-                        fill="url(#colorExpense)"
-                        name="Gastos"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="balance" 
-                        stroke="hsl(221 83% 53%)" 
-                        strokeWidth={2}
-                        fillOpacity={0.3} 
-                        fill="url(#colorBalance)"
-                        name="Balance"
-                      />
-                    </>
-                  )}
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="w-full h-full">
+                {/* Gráfico de Barras más simple y robusto */}
+                <ResponsiveContainer width="100%" height="85%">
+                  <BarChart 
+                    data={chartData} 
+                    margin={{ top: 10, right: 10, left: 0, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#6b7280', fontSize: 11 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#6b7280', fontSize: 11 }}
+                      domain={['auto', 'auto']}
+                      tickFormatter={(value) => {
+                        if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                        if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+                        return `$${value}`;
+                      }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'white', 
+                        borderRadius: '8px', 
+                        border: '1px solid #e5e7eb',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        fontSize: '12px'
+                      }}
+                      formatter={tooltipFormatter}
+                    />
+                    <Legend />
+                    {viewMode === 'monthly' ? (
+                      <>
+                        <Bar 
+                          dataKey="cumulativeBalance" 
+                          fill="hsl(221 83% 53%)" 
+                          name="Balance Acumulado"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar 
+                          dataKey="cumulativeIncome" 
+                          fill="hsl(142 76% 36%)" 
+                          name="Ingresos Acumulados"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar 
+                          dataKey="cumulativeExpense" 
+                          fill="hsl(0 84.2% 60.2%)" 
+                          name="Gastos Acumulados"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Bar 
+                          dataKey="income" 
+                          fill="hsl(142 76% 36%)" 
+                          name="Ingresos"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar 
+                          dataKey="expense" 
+                          fill="hsl(0 84.2% 60.2%)" 
+                          name="Gastos"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar 
+                          dataKey="balance" 
+                          fill="hsl(221 83% 53%)" 
+                          name="Balance"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </>
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+                {/* Tabla de datos debajo del gráfico */}
+                <div className="mt-4 border-t pt-3 max-h-32 overflow-y-auto">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">Resumen Mensual</div>
+                  <div className="space-y-1">
+                    {chartData.slice(-6).reverse().map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center text-xs py-1">
+                        <span className="text-gray-600 font-medium">{item.name}</span>
+                        <div className="flex gap-3">
+                          <span className="text-green-600">+{formatCurrency(item.income || 0, defaultCurrency)}</span>
+                          <span className="text-red-600">-{formatCurrency(item.expense || 0, defaultCurrency)}</span>
+                          <span className={`font-semibold ${(item.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(item.balance || 0, defaultCurrency)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
               )}
             </div>
           </CardContent>
