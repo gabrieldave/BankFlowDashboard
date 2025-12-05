@@ -909,7 +909,7 @@ export default function Dashboard() {
                 </div>
               ) : viewMode === 'monthly' ? (
               /* MODO ACUMULADO - Gráfico con valores claros */
-              <div className="w-full flex-1 flex flex-col min-h-0">
+              <div className="w-full flex-1 flex flex-col" style={{ minHeight: '400px' }}>
                 {/* Explicación de Acumulado */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex-shrink-0">
                   <div className="text-sm font-semibold text-gray-800 mb-1">💰 ¿Qué es Balance Acumulado?</div>
@@ -920,7 +920,7 @@ export default function Dashboard() {
                 </div>
                 
                 {/* Gráfico de Barras Acumulado */}
-                <div className="flex-1 min-h-[200px] max-h-[280px] mb-4">
+                <div className="mb-4" style={{ height: '280px', width: '100%' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
                       data={chartData.slice(-12)} 
