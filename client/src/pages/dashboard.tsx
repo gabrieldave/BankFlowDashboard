@@ -857,7 +857,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-[350px] w-full">
+            <div className="min-h-[350px] w-full max-h-[600px] flex flex-col">
               {loadingStats ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center space-y-2">
@@ -909,9 +909,9 @@ export default function Dashboard() {
                 </div>
               ) : viewMode === 'monthly' ? (
               /* MODO ACUMULADO - Gráfico con valores claros */
-              <div className="w-full h-full flex flex-col">
+              <div className="w-full flex-1 flex flex-col min-h-0">
                 {/* Explicación de Acumulado */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex-shrink-0">
                   <div className="text-sm font-semibold text-gray-800 mb-1">💰 ¿Qué es Balance Acumulado?</div>
                   <div className="text-xs text-gray-700">
                     Es la suma de todos tus ingresos menos todos tus gastos desde el inicio hasta cada mes. 
@@ -920,7 +920,7 @@ export default function Dashboard() {
                 </div>
                 
                 {/* Gráfico de Barras Acumulado */}
-                <div className="flex-1 min-h-[250px]">
+                <div className="flex-1 min-h-[200px] max-h-[280px] mb-4">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
                       data={chartData.slice(-12)} 
@@ -975,11 +975,11 @@ export default function Dashboard() {
                 </div>
                 
                 {/* Tabla de valores acumulados - Con scroll para muchos meses */}
-                <div className="mt-4 border-t pt-3">
+                <div className="border-t pt-3 flex-shrink-0">
                   <div className="text-xs font-semibold text-gray-700 mb-2">
                     Valores Acumulados por Mes {chartData.length > 12 && `(Mostrando últimos 12 de ${chartData.length})`}
                   </div>
-                  <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
+                  <div className="space-y-1 max-h-[120px] overflow-y-auto pr-2">
                     {chartData.slice(-12).reverse().map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center text-xs py-1.5 px-2 hover:bg-gray-50 rounded">
                         <span className="font-medium text-gray-700 flex-shrink-0">{item.name}</span>
