@@ -832,7 +832,32 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
+        {/* Evolución del Balance - Ocupa todo el ancho */}
+        <Card className="border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="font-heading text-lg">Evolución del Balance</CardTitle>
+            <div className="flex gap-2">
+              <Button
+                variant={viewMode === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('all')}
+                className="h-8 text-xs"
+              >
+                Mensual
+              </Button>
+              <Button
+                variant={viewMode === 'monthly' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('monthly')}
+                className="h-8 text-xs"
+              >
+                Acumulado
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px] w-full">
         <Card className="lg:col-span-2 border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="font-heading text-lg">Evolución del Balance</CardTitle>
@@ -856,7 +881,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] w-full">
+            <div className="h-[350px] w-full">
               {loadingStats ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center space-y-2">
@@ -923,7 +948,7 @@ export default function Dashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
                       data={chartData.slice(-12)} 
-                      margin={{ top: 10, right: 10, left: 10, bottom: 60 }}
+                      margin={{ top: 10, right: 10, left: 90, bottom: 60 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                       <XAxis 
@@ -939,7 +964,18 @@ export default function Dashboard() {
                         axisLine={false} 
                         tickLine={false} 
                         tick={{ fill: '#6b7280', fontSize: 11 }}
-                        tickFormatter={(value) => formatCurrency(value, defaultCurrency)}
+                        width={85}
+                        tickFormatter={(value) => {
+                          // Formato compacto para números grandes
+                          const absValue = Math.abs(value);
+                          if (absValue >= 1000000) {
+                            return `$${(value / 1000000).toFixed(1)}M`;
+                          }
+                          if (absValue >= 1000) {
+                            return `$${(value / 1000).toFixed(0)}K`;
+                          }
+                          return formatCurrency(value, defaultCurrency);
+                        }}
                       />
                       <Tooltip 
                         contentStyle={{ 
@@ -962,14 +998,16 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 </div>
                 
-                {/* Tabla de valores acumulados */}
+                {/* Tabla de valores acumulados - Con scroll para muchos meses */}
                 <div className="mt-4 border-t pt-3">
-                  <div className="text-xs font-semibold text-gray-700 mb-2">Valores Acumulados por Mes</div>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">
+                    Valores Acumulados por Mes {chartData.length > 12 && `(Mostrando últimos 12 de ${chartData.length})`}
+                  </div>
+                  <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
                     {chartData.slice(-12).reverse().map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-xs py-1 px-2 hover:bg-gray-50 rounded">
-                        <span className="font-medium text-gray-700">{item.name}</span>
-                        <span className={`font-bold ${(item.cumulativeBalance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <div key={idx} className="flex justify-between items-center text-xs py-1.5 px-2 hover:bg-gray-50 rounded">
+                        <span className="font-medium text-gray-700 flex-shrink-0">{item.name}</span>
+                        <span className={`font-bold text-right flex-shrink-0 ml-2 ${(item.cumulativeBalance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {formatCurrency(item.cumulativeBalance || 0, defaultCurrency)}
                         </span>
                       </div>
@@ -981,25 +1019,30 @@ export default function Dashboard() {
               /* MODO MENSUAL - Tabla con Ingresos, Salidas y Balance */
               <div className="w-full h-full">
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 border-b border-gray-200">
+                  <div className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                     <div className="grid grid-cols-4 gap-4 p-4 text-sm font-bold text-gray-700">
-                      <div>Mes</div>
-                      <div className="text-right text-green-600">Ingresos</div>
-                      <div className="text-right text-red-600">Salidas</div>
-                      <div className="text-right">Balance</div>
+                      <div className="flex-shrink-0">Mes</div>
+                      <div className="text-right text-green-600 flex-shrink-0">Ingresos</div>
+                      <div className="text-right text-red-600 flex-shrink-0">Salidas</div>
+                      <div className="text-right flex-shrink-0">Balance</div>
                     </div>
+                    {chartData.length > 12 && (
+                      <div className="px-4 pb-2 text-xs text-gray-500">
+                        Mostrando últimos 12 meses de {chartData.length} totales
+                      </div>
+                    )}
                   </div>
-                  <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
+                  <div className="divide-y divide-gray-100 max-h-[350px] overflow-y-auto">
                     {chartData.slice(-12).reverse().map((item, idx) => (
                       <div key={idx} className="grid grid-cols-4 gap-4 p-4 hover:bg-gray-50 transition-colors">
-                        <div className="font-semibold text-gray-800 text-sm">{item.name}</div>
-                        <div className="text-right text-green-600 font-semibold text-sm">
+                        <div className="font-semibold text-gray-800 text-sm flex-shrink-0 min-w-0 truncate">{item.name}</div>
+                        <div className="text-right text-green-600 font-semibold text-sm flex-shrink-0 whitespace-nowrap">
                           {formatCurrency(item.income || 0, defaultCurrency)}
                         </div>
-                        <div className="text-right text-red-600 font-semibold text-sm">
+                        <div className="text-right text-red-600 font-semibold text-sm flex-shrink-0 whitespace-nowrap">
                           {formatCurrency(item.expense || 0, defaultCurrency)}
                         </div>
-                        <div className={`text-right font-bold text-sm ${(item.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <div className={`text-right font-bold text-sm flex-shrink-0 whitespace-nowrap ${(item.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {formatCurrency(item.balance || 0, defaultCurrency)}
                         </div>
                       </div>
@@ -1012,6 +1055,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Gastos por Categoría - Ahora abajo en su propia fila */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="font-heading text-lg">Gastos por Categoría</CardTitle>
