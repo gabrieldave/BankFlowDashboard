@@ -33,8 +33,8 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
-      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-8 items-center">
-        {/* Sección de Branding e Introducción */}
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-center">
+        {/* Sección de Branding e Introducción - Oculto en móvil, visible en desktop */}
         <div className="hidden md:block space-y-6 text-center md:text-left">
           <div className="space-y-4">
             <div className="flex items-center gap-4 justify-center md:justify-start">
@@ -90,36 +90,36 @@ export default function Login() {
         </div>
 
         {/* Formulario de Login */}
-        <Card className="w-full max-w-md shadow-xl border-0 mx-auto">
-          <CardHeader className="space-y-1 text-center">
-            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
-              <span className="text-white font-heading font-bold text-2xl">F</span>
+        <Card className="w-full max-w-md shadow-xl border-0 mx-auto order-first md:order-none">
+          <CardHeader className="space-y-1 text-center px-4 md:px-6 pt-6 md:pt-6">
+            <div className="mx-auto w-14 h-14 md:w-16 md:h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/20">
+              <span className="text-white font-heading font-bold text-xl md:text-2xl">F</span>
             </div>
-            <CardTitle className="text-3xl font-heading font-bold">Bienvenido</CardTitle>
-            <CardDescription className="text-base">
+            <CardTitle className="text-2xl md:text-3xl font-heading font-bold">Bienvenido</CardTitle>
+            <CardDescription className="text-sm md:text-base">
               Inicia sesión en tu cuenta para continuar
             </CardDescription>
           </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 md:px-6 pb-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription className="text-sm">{error}</AlertDescription>
               </Alert>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Correo electrónico</Label>
+              <Label htmlFor="email" className="text-sm md:text-base">Correo electrónico</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="tu@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
+                  className="pl-9 md:pl-10 h-10 md:h-11 text-sm md:text-base"
                   required
                   disabled={isLoading}
                 />
@@ -127,12 +127,12 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Contraseña</Label>
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <Label htmlFor="password" className="text-sm md:text-base">Contraseña</Label>
                 <Link href="/forgot-password">
                   <button
                     type="button"
-                    className="text-sm text-primary hover:underline"
+                    className="text-xs md:text-sm text-primary hover:underline whitespace-nowrap"
                     disabled={isLoading}
                   >
                     ¿Olvidaste tu contraseña?
@@ -140,14 +140,14 @@ export default function Login() {
                 </Link>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-9 md:pl-10 h-10 md:h-11 text-sm md:text-base"
                   required
                   disabled={isLoading}
                 />
@@ -156,7 +156,7 @@ export default function Login() {
 
             <Button
               type="submit"
-              className="w-full"
+              className="w-full h-10 md:h-11 text-sm md:text-base"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -172,7 +172,7 @@ export default function Login() {
               )}
             </Button>
 
-            <div className="text-center text-sm text-muted-foreground">
+            <div className="text-center text-xs md:text-sm text-muted-foreground">
               ¿No tienes una cuenta?{' '}
               <Link href="/register">
                 <button
@@ -189,20 +189,20 @@ export default function Login() {
       </Card>
       </div>
       
-      {/* Versión móvil de la introducción */}
-      <div className="md:hidden mt-8 space-y-4 text-center">
-        <div className="flex items-center justify-center gap-3">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <span className="text-white font-heading font-black text-3xl">F</span>
+      {/* Versión móvil de la introducción - Mostrada después del formulario */}
+      <div className="md:hidden mt-6 space-y-3 text-center px-4">
+        <div className="flex items-center justify-center gap-2">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <span className="text-white font-heading font-black text-2xl">F</span>
           </div>
-          <h1 className="text-4xl font-heading font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-heading font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
             FinTrack
           </h1>
         </div>
-        <p className="text-lg font-semibold text-gray-800">
+        <p className="text-base font-semibold text-gray-800">
           Controla tus finanzas con inteligencia
         </p>
-        <p className="text-sm text-gray-600 px-4">
+        <p className="text-xs text-gray-600 leading-relaxed">
           Analiza automáticamente tus estados de cuenta, categoriza tus gastos y toma decisiones financieras más informadas.
         </p>
       </div>

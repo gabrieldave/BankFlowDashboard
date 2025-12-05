@@ -537,112 +537,123 @@ export default function Dashboard() {
   };
   const categoryDataWithColors = getCategoryDataWithColors();
 
-  // Calcular datos del gráfico según el modo de vista
+  // Calcular datos del gráfico - VERSIÓN SIMPLIFICADA Y ROBUSTA
   const getChartData = () => {
-    // Siempre calcular desde las transacciones para asegurar que tenemos datos
-    // Fix: Si stats.monthlyData está vacío, calcular desde transacciones
-    let monthlyDataToUse: Array<{ name: string; income: number; expense: number; balance: number }> = [];
-    
-    // Primero intentar usar stats.monthlyData si existe y tiene datos
-    if (stats?.monthlyData && Array.isArray(stats.monthlyData) && stats.monthlyData.length > 0) {
-      monthlyDataToUse = stats.monthlyData.map(m => ({
-        name: m.name || '',
-        income: parseFloat(String(m.income || 0)),
-        expense: parseFloat(String(m.expense || 0)),
-        balance: parseFloat(String(m.balance || (m.income || 0) - (m.expense || 0))),
-      }));
-    }
-    
-    // Si no hay datos en stats o está vacío, calcular desde las transacciones
-    if (monthlyDataToUse.length === 0 && transactionsArray.length > 0) {
-      try {
-        const monthlyTotals: Record<string, { income: number; expense: number }> = {};
-        
-        transactionsArray.forEach(t => {
-          try {
-            if (!t?.date) return;
-            
-            // Intentar parsear la fecha con diferentes formatos
-            let date: Date;
-            if (typeof t.date === 'string') {
-              // Si la fecha no tiene hora, agregar T00:00:00 para evitar problemas de zona horaria
-              const dateStr = t.date.includes('T') ? t.date : `${t.date}T00:00:00`;
-              date = new Date(dateStr);
-            } else {
-              date = new Date(t.date);
-            }
-            
-            if (isNaN(date.getTime())) return;
-            
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            
-            if (!monthlyTotals[monthKey]) {
-              monthlyTotals[monthKey] = { income: 0, expense: 0 };
-            }
-            
-            const amount = parseFloat(String(t.amount || 0));
-            if (isNaN(amount) || amount === 0) return;
-            
-            if (t.type === 'income') {
-              monthlyTotals[monthKey].income += amount;
-            } else if (t.type === 'expense') {
-              monthlyTotals[monthKey].expense += amount;
-            }
-          } catch {
-            // Ignorar errores
-          }
-        });
-
-        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        
-        monthlyDataToUse = Object.entries(monthlyTotals)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .slice(-12) // Últimos 12 meses
-          .map(([key, { income, expense }]) => {
-            const [year, month] = key.split('-');
-            return {
-              name: `${monthNames[parseInt(month) - 1]} ${year.slice(2)}`,
-              income: parseFloat(income.toFixed(2)),
-              expense: parseFloat(expense.toFixed(2)),
-              balance: parseFloat((income - expense).toFixed(2)),
-            };
-          });
-      } catch (error) {
-        console.error('Error calculando datos mensuales:', error);
-        return [];
-      }
-    }
-    
-    if (!monthlyDataToUse || monthlyDataToUse.length === 0) {
-      return [];
-    }
-    
     try {
-      if (viewMode === 'monthly') {
+      // Primero intentar usar stats.monthlyData si existe
+      if (stats?.monthlyData && Array.isArray(stats.monthlyData) && stats.monthlyData.length > 0) {
+        const data = stats.monthlyData.map(m => ({
+          name: m.name || 'Sin nombre',
+          income: Number(m.income) || 0,
+          expense: Number(m.expense) || 0,
+          balance: Number(m.balance) || (Number(m.income) || 0) - (Number(m.expense) || 0),
+        })).filter(m => m.name !== 'Sin nombre');
+        
+        if (data.length > 0) {
+          if (viewMode === 'monthly') {
+            let cumulativeBalance = 0;
+            let cumulativeIncome = 0;
+            let cumulativeExpense = 0;
+            return data.map(month => {
+              cumulativeIncome += month.income;
+              cumulativeExpense += month.expense;
+              cumulativeBalance = cumulativeIncome - cumulativeExpense;
+              return {
+                ...month,
+                cumulativeBalance: Math.round(cumulativeBalance * 100) / 100,
+                cumulativeIncome: Math.round(cumulativeIncome * 100) / 100,
+                cumulativeExpense: Math.round(cumulativeExpense * 100) / 100,
+              };
+            });
+          }
+          return data;
+        }
+      }
+      
+      // Si no hay stats.monthlyData, calcular desde transacciones de forma más simple
+      if (transactionsArray.length === 0) return [];
+      
+      const monthlyTotals: Record<string, { income: number; expense: number }> = {};
+      const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      
+      transactionsArray.forEach(t => {
+        if (!t?.date) return;
+        
+        // Parsear fecha de forma más robusta
+        const dateStr = String(t.date);
+        let date: Date;
+        
+        // Intentar diferentes formatos de fecha
+        if (dateStr.includes('T')) {
+          date = new Date(dateStr);
+        } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          date = new Date(dateStr + 'T12:00:00');
+        } else {
+          date = new Date(dateStr);
+        }
+        
+        if (isNaN(date.getTime())) return;
+        
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+        
+        if (!monthlyTotals[monthKey]) {
+          monthlyTotals[monthKey] = { income: 0, expense: 0 };
+        }
+        
+        const amount = Number(t.amount) || 0;
+        if (amount === 0) return;
+        
+        if (t.type === 'income') {
+          monthlyTotals[monthKey].income += amount;
+        } else if (t.type === 'expense') {
+          monthlyTotals[monthKey].expense += amount;
+        }
+      });
+      
+      const result = Object.entries(monthlyTotals)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-12)
+        .map(([key, { income, expense }]) => {
+          const [year, month] = key.split('-');
+          return {
+            name: `${monthNames[parseInt(month) - 1]} ${year.slice(2)}`,
+            income: Math.round(income * 100) / 100,
+            expense: Math.round(expense * 100) / 100,
+            balance: Math.round((income - expense) * 100) / 100,
+          };
+        });
+      
+      if (viewMode === 'monthly' && result.length > 0) {
         let cumulativeBalance = 0;
         let cumulativeIncome = 0;
         let cumulativeExpense = 0;
-        
-        return monthlyDataToUse.map((month) => {
-          if (!month || typeof month !== 'object') return null;
-          cumulativeIncome += (month.income || 0);
-          cumulativeExpense += (month.expense || 0);
+        return result.map(month => {
+          cumulativeIncome += month.income;
+          cumulativeExpense += month.expense;
           cumulativeBalance = cumulativeIncome - cumulativeExpense;
-          
           return {
             ...month,
-            cumulativeBalance: parseFloat(cumulativeBalance.toFixed(2)),
-            cumulativeIncome: parseFloat(cumulativeIncome.toFixed(2)),
-            cumulativeExpense: parseFloat(cumulativeExpense.toFixed(2)),
+            cumulativeBalance: Math.round(cumulativeBalance * 100) / 100,
+            cumulativeIncome: Math.round(cumulativeIncome * 100) / 100,
+            cumulativeExpense: Math.round(cumulativeExpense * 100) / 100,
           };
-        }).filter((item): item is NonNullable<typeof item> => item !== null);
+        });
       }
-      return monthlyDataToUse.filter((month) => month && typeof month === 'object');
-    } catch {
+      
+      return result;
+    } catch (error) {
+      console.error('Error en getChartData:', error);
       return [];
     }
   };
   const chartData = getChartData();
+  
+  // Debug: Log de datos del gráfico
+  if (chartData.length > 0) {
+    console.log('Chart data:', chartData);
+  }
 
   // Formatter del Tooltip
   const tooltipFormatter = (value: any, name: string) => {
@@ -851,22 +862,44 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : !chartData || chartData.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  <div className="text-center space-y-2">
-                    <p className="text-sm">No hay datos para mostrar en el gráfico</p>
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+                  <div className="text-center space-y-2 mb-4">
+                    <p className="text-sm font-medium">No hay datos para el gráfico</p>
                     <p className="text-xs text-muted-foreground">
                       {transactionsArray.length > 0 
-                        ? `Hay ${transactionsArray.length} transacciones pero no se pudieron agrupar por mes. Verifica que las fechas sean válidas.`
-                        : 'Agrega más transacciones para ver la evolución'}
+                        ? `Hay ${transactionsArray.length} transacciones. Mostrando resumen en tabla.`
+                        : 'Agrega transacciones para ver la evolución'}
                     </p>
                   </div>
+                  {transactionsArray.length > 0 && (
+                    <div className="w-full max-w-md space-y-2 text-left">
+                      <div className="flex justify-between items-center p-2 bg-blue-50 rounded">
+                        <span className="text-sm font-medium">Total Ingresos:</span>
+                        <span className="text-sm font-bold text-green-600">
+                          {formatCurrency(displayStats.monthlyIncome, defaultCurrency)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 bg-red-50 rounded">
+                        <span className="text-sm font-medium">Total Gastos:</span>
+                        <span className="text-sm font-bold text-red-600">
+                          {formatCurrency(displayStats.monthlyExpenses, defaultCurrency)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                        <span className="text-sm font-medium">Balance:</span>
+                        <span className={`text-sm font-bold ${displayStats.totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(displayStats.totalBalance, defaultCurrency)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : chartData.every(d => (d.income || 0) === 0 && (d.expense || 0) === 0 && (d.balance || 0) === 0) ? (
+              ) : chartData.every(d => (d.income || 0) === 0 && (d.expense || 0) === 0 && (d.balance || 0) === 0 && (d.cumulativeBalance || 0) === 0) ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center space-y-2">
-                    <p className="text-sm">Los datos del gráfico están en cero</p>
+                    <p className="text-sm">Los datos están en cero</p>
                     <p className="text-xs text-muted-foreground">
-                      Todas las transacciones tienen valores en cero. Verifica los datos.
+                      Verifica que las transacciones tengan montos válidos.
                     </p>
                   </div>
                 </div>
