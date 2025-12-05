@@ -1125,6 +1125,7 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between bg-white border-b border-gray-50 pb-4">
