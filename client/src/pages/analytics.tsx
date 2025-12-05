@@ -484,6 +484,57 @@ export default function Analytics() {
       ? dailyData.reduce((acc, d) => acc + d.income, 0) / totalDays 
       : 0;
 
+    // Calcular tendencia de gastos: comparar últimos 3 meses vs 3 meses anteriores
+    let calculatedExpenseTrend = 0;
+    if (stats?.monthlyData && Array.isArray(stats.monthlyData) && stats.monthlyData.length >= 6) {
+      try {
+        const monthlyData = stats.monthlyData.slice(-6); // Últimos 6 meses
+        const last3Months = monthlyData.slice(-3); // Últimos 3 meses
+        const previous3Months = monthlyData.slice(0, 3); // 3 meses anteriores
+        
+        const last3Total = last3Months.reduce((sum, m) => sum + (Number(m.expense) || 0), 0);
+        const previous3Total = previous3Months.reduce((sum, m) => sum + (Number(m.expense) || 0), 0);
+        
+        if (previous3Total > 0) {
+          calculatedExpenseTrend = ((last3Total - previous3Total) / previous3Total) * 100;
+        }
+      } catch (error) {
+        console.error('Error calculando tendencia:', error);
+      }
+    } else if (transactionsToUse.length > 0) {
+      // Calcular desde transacciones si no hay monthlyData
+      try {
+        const monthlyTotals: Record<string, number> = {};
+        transactionsToUse.forEach(t => {
+          if (t.type === 'expense' && t.date) {
+            try {
+              const date = new Date(String(t.date) + 'T00:00:00');
+              if (!isNaN(date.getTime())) {
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const amount = Number(t.amount) || 0;
+                monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + amount;
+              }
+            } catch {}
+          }
+        });
+        
+        const sortedMonths = Object.entries(monthlyTotals)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .slice(-6); // Últimos 6 meses
+        
+        if (sortedMonths.length >= 6) {
+          const last3Total = sortedMonths.slice(-3).reduce((sum, [, val]) => sum + val, 0);
+          const previous3Total = sortedMonths.slice(0, 3).reduce((sum, [, val]) => sum + val, 0);
+          
+          if (previous3Total > 0) {
+            calculatedExpenseTrend = ((last3Total - previous3Total) / previous3Total) * 100;
+          }
+        }
+      } catch (error) {
+        console.error('Error calculando tendencia desde transacciones:', error);
+      }
+    }
+
     return {
       totalBalance: parseFloat(totalBalance.toFixed(2)),
       monthlyIncome: parseFloat(income.toFixed(2)),
@@ -500,8 +551,8 @@ export default function Analytics() {
         : 0,
       avgDailyExpense: parseFloat(avgDailyExpense.toFixed(2)),
       avgDailyIncome: parseFloat(avgDailyIncome.toFixed(2)),
-      expenseTrend: stats.expenseTrend || 0,
-      balanceTrend: stats.balanceTrend || 0,
+      expenseTrend: calculatedExpenseTrend !== 0 ? calculatedExpenseTrend : (stats?.expenseTrend || 0),
+      balanceTrend: stats?.balanceTrend || 0,
     };
   };
 

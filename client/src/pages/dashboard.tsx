@@ -1056,7 +1056,6 @@ export default function Dashboard() {
         </Card>
 
         {/* Gastos por Categoría - Ahora abajo en su propia fila */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="font-heading text-lg">Gastos por Categoría</CardTitle>
@@ -1126,7 +1125,6 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between bg-white border-b border-gray-50 pb-4">
