@@ -1006,10 +1006,10 @@ export default function Dashboard() {
                   </PieChart>
                 </ResponsiveContainer>
                 )}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-8">
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Total Gastos</p>
-                    <p className="text-xl font-bold text-foreground">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center space-y-1">
+                    <p className="text-xs text-muted-foreground mb-1">Total Gastos</p>
+                    <p className="text-xl font-bold text-foreground leading-tight">
                       {formatCurrency(stats?.monthlyExpenses || 0, defaultCurrency)}
                     </p>
                   </div>
