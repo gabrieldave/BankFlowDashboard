@@ -52,6 +52,8 @@ import {
 import { getTransactions, getStats } from "@/lib/api";
 import { formatCurrency, getTransactionCurrency } from "@/lib/currency";
 
+// Dashboard component for financial overview and transaction management
+
 const CHART_COLORS = [
   'hsl(221 83% 53%)',
   'hsl(142 76% 36%)',
@@ -537,18 +539,39 @@ export default function Dashboard() {
 
   // Calcular datos del gráfico según el modo de vista
   const getChartData = () => {
-    // Si no hay datos mensuales en stats, calcularlos desde las transacciones
-    let monthlyDataToUse = stats?.monthlyData || [];
+    // Siempre calcular desde las transacciones para asegurar que tenemos datos
+    // Fix: Si stats.monthlyData está vacío, calcular desde transacciones
+    let monthlyDataToUse: Array<{ name: string; income: number; expense: number; balance: number }> = [];
     
-    if (!monthlyDataToUse || !Array.isArray(monthlyDataToUse) || monthlyDataToUse.length === 0) {
-      // Calcular datos mensuales desde las transacciones
+    // Primero intentar usar stats.monthlyData si existe y tiene datos
+    if (stats?.monthlyData && Array.isArray(stats.monthlyData) && stats.monthlyData.length > 0) {
+      monthlyDataToUse = stats.monthlyData.map(m => ({
+        name: m.name || '',
+        income: parseFloat(String(m.income || 0)),
+        expense: parseFloat(String(m.expense || 0)),
+        balance: parseFloat(String(m.balance || (m.income || 0) - (m.expense || 0))),
+      }));
+    }
+    
+    // Si no hay datos en stats o está vacío, calcular desde las transacciones
+    if (monthlyDataToUse.length === 0 && transactionsArray.length > 0) {
       try {
         const monthlyTotals: Record<string, { income: number; expense: number }> = {};
         
         transactionsArray.forEach(t => {
           try {
             if (!t?.date) return;
-            const date = new Date(t.date);
+            
+            // Intentar parsear la fecha con diferentes formatos
+            let date: Date;
+            if (typeof t.date === 'string') {
+              // Si la fecha no tiene hora, agregar T00:00:00 para evitar problemas de zona horaria
+              const dateStr = t.date.includes('T') ? t.date : `${t.date}T00:00:00`;
+              date = new Date(dateStr);
+            } else {
+              date = new Date(t.date);
+            }
+            
             if (isNaN(date.getTime())) return;
             
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -558,7 +581,7 @@ export default function Dashboard() {
             }
             
             const amount = parseFloat(String(t.amount || 0));
-            if (isNaN(amount)) return;
+            if (isNaN(amount) || amount === 0) return;
             
             if (t.type === 'income') {
               monthlyTotals[monthKey].income += amount;
@@ -584,7 +607,8 @@ export default function Dashboard() {
               balance: parseFloat((income - expense).toFixed(2)),
             };
           });
-      } catch {
+      } catch (error) {
+        console.error('Error calculando datos mensuales:', error);
         return [];
       }
     }
@@ -830,7 +854,11 @@ export default function Dashboard() {
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center space-y-2">
                     <p className="text-sm">No hay datos para mostrar en el gráfico</p>
-                    <p className="text-xs text-muted-foreground">Agrega más transacciones para ver la evolución</p>
+                    <p className="text-xs text-muted-foreground">
+                      {transactionsArray.length > 0 
+                        ? `Hay ${transactionsArray.length} transacciones pero no se pudieron agrupar por mes. Verifica que las fechas sean válidas.`
+                        : 'Agrega más transacciones para ver la evolución'}
+                    </p>
                   </div>
                 </div>
               ) : (

@@ -104,3 +104,4 @@ Como los 290 registros existentes están vacíos (solo tienen metadata), la mejo
 - Para llenar los registros existentes, necesitarías actualizar cada uno manualmente
 - Es más eficiente recrear la colección y volver a subir los archivos
 
+
