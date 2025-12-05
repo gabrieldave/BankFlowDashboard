@@ -857,30 +857,6 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-[400px] w-full">
-        <Card className="lg:col-span-2 border-none shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="font-heading text-lg">Evolución del Balance</CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant={viewMode === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setViewMode('all')}
-                className="h-8 text-xs"
-              >
-                Mensual
-              </Button>
-              <Button
-                variant={viewMode === 'monthly' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setViewMode('monthly')}
-                className="h-8 text-xs"
-              >
-                Acumulado
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
             <div className="h-[350px] w-full">
               {loadingStats ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
