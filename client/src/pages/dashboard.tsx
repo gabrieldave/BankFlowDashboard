@@ -906,14 +906,24 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
-              ) : (
-              <div className="w-full h-full">
-                {/* Gráfico de Barras - Similar a Analytics */}
-                <div className="h-[300px] w-full">
+              ) : viewMode === 'monthly' ? (
+              /* MODO ACUMULADO - Gráfico con valores claros */
+              <div className="w-full h-full flex flex-col">
+                {/* Explicación de Acumulado */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <div className="text-sm font-semibold text-gray-800 mb-1">💰 ¿Qué es Balance Acumulado?</div>
+                  <div className="text-xs text-gray-700">
+                    Es la suma de todos tus ingresos menos todos tus gastos desde el inicio hasta cada mes. 
+                    Muestra cuánto dinero has acumulado en total mes a mes.
+                  </div>
+                </div>
+                
+                {/* Gráfico de Barras Acumulado */}
+                <div className="flex-1 min-h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
                       data={chartData.slice(-12)} 
-                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                      margin={{ top: 10, right: 10, left: 10, bottom: 60 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                       <XAxis 
@@ -923,54 +933,78 @@ export default function Dashboard() {
                         tick={{ fill: '#6b7280', fontSize: 11 }}
                         angle={-45}
                         textAnchor="end"
-                        height={100}
+                        height={60}
                       />
                       <YAxis 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fill: '#6b7280', fontSize: 12 }}
+                        tick={{ fill: '#6b7280', fontSize: 11 }}
+                        tickFormatter={(value) => formatCurrency(value, defaultCurrency)}
                       />
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'white', 
                           borderRadius: '8px', 
                           border: '1px solid #e5e7eb',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                          fontSize: '12px'
                         }}
-                        formatter={tooltipFormatter}
+                        formatter={(value: any) => formatCurrency(value, defaultCurrency)}
                       />
                       <Legend />
-                      {viewMode === 'monthly' ? (
-                        <Bar 
-                          dataKey="cumulativeBalance" 
-                          fill="hsl(221 83% 53%)" 
-                          name="Balance Acumulado"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      ) : (
-                        <>
-                          <Bar 
-                            dataKey="income" 
-                            fill="hsl(142 76% 36%)" 
-                            name="Ingresos"
-                            radius={[4, 4, 0, 0]}
-                          />
-                          <Bar 
-                            dataKey="expense" 
-                            fill="hsl(0 84.2% 60.2%)" 
-                            name="Gastos"
-                            radius={[4, 4, 0, 0]}
-                          />
-                          <Bar 
-                            dataKey="balance" 
-                            fill="hsl(221 83% 53%)" 
-                            name="Balance"
-                            radius={[4, 4, 0, 0]}
-                          />
-                        </>
-                      )}
+                      <Bar 
+                        dataKey="cumulativeBalance" 
+                        fill="hsl(221 83% 53%)" 
+                        name="Balance Acumulado"
+                        radius={[4, 4, 0, 0]}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+                
+                {/* Tabla de valores acumulados */}
+                <div className="mt-4 border-t pt-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Valores Acumulados por Mes</div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {chartData.slice(-12).reverse().map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center text-xs py-1 px-2 hover:bg-gray-50 rounded">
+                        <span className="font-medium text-gray-700">{item.name}</span>
+                        <span className={`font-bold ${(item.cumulativeBalance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(item.cumulativeBalance || 0, defaultCurrency)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              ) : (
+              /* MODO MENSUAL - Tabla con Ingresos, Salidas y Balance */
+              <div className="w-full h-full">
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 border-b border-gray-200">
+                    <div className="grid grid-cols-4 gap-4 p-4 text-sm font-bold text-gray-700">
+                      <div>Mes</div>
+                      <div className="text-right text-green-600">Ingresos</div>
+                      <div className="text-right text-red-600">Salidas</div>
+                      <div className="text-right">Balance</div>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
+                    {chartData.slice(-12).reverse().map((item, idx) => (
+                      <div key={idx} className="grid grid-cols-4 gap-4 p-4 hover:bg-gray-50 transition-colors">
+                        <div className="font-semibold text-gray-800 text-sm">{item.name}</div>
+                        <div className="text-right text-green-600 font-semibold text-sm">
+                          {formatCurrency(item.income || 0, defaultCurrency)}
+                        </div>
+                        <div className="text-right text-red-600 font-semibold text-sm">
+                          {formatCurrency(item.expense || 0, defaultCurrency)}
+                        </div>
+                        <div className={`text-right font-bold text-sm ${(item.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(item.balance || 0, defaultCurrency)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               )}
