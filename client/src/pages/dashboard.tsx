@@ -907,19 +907,13 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : (
-              <div className="w-full h-full flex flex-col">
-                {/* Debug info - solo en desarrollo */}
-                {process.env.NODE_ENV === 'development' && (
-                  <div className="text-xs text-gray-400 mb-1 px-2">
-                    Datos: {chartData.length} meses | Modo: {viewMode} | Primer dato: {chartData[0]?.name || 'N/A'}
-                  </div>
-                )}
-                {/* Gráfico de Barras más simple y robusto */}
-                <div className="flex-1 min-h-[200px]">
+              <div className="w-full h-full">
+                {/* Gráfico de Barras - Similar a Analytics */}
+                <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
-                      data={chartData} 
-                      margin={{ top: 10, right: 10, left: 10, bottom: 60 }}
+                      data={chartData.slice(-12)} 
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                       <XAxis 
@@ -929,52 +923,30 @@ export default function Dashboard() {
                         tick={{ fill: '#6b7280', fontSize: 11 }}
                         angle={-45}
                         textAnchor="end"
-                        height={60}
+                        height={100}
                       />
                       <YAxis 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fill: '#6b7280', fontSize: 11 }}
-                        domain={['auto', 'auto']}
-                        tickFormatter={(value) => {
-                          const absValue = Math.abs(value);
-                          if (absValue >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-                          if (absValue >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-                          return `$${Math.round(value)}`;
-                        }}
+                        tick={{ fill: '#6b7280', fontSize: 12 }}
                       />
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'white', 
                           borderRadius: '8px', 
                           border: '1px solid #e5e7eb',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                          fontSize: '12px'
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
                         }}
                         formatter={tooltipFormatter}
                       />
-                      <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                      <Legend />
                       {viewMode === 'monthly' ? (
-                        <>
-                          <Bar 
-                            dataKey="cumulativeBalance" 
-                            fill="hsl(221 83% 53%)" 
-                            name="Balance Acumulado"
-                            radius={[4, 4, 0, 0]}
-                          />
-                          <Bar 
-                            dataKey="cumulativeIncome" 
-                            fill="hsl(142 76% 36%)" 
-                            name="Ingresos Acumulados"
-                            radius={[4, 4, 0, 0]}
-                          />
-                          <Bar 
-                            dataKey="cumulativeExpense" 
-                            fill="hsl(0 84.2% 60.2%)" 
-                            name="Gastos Acumulados"
-                            radius={[4, 4, 0, 0]}
-                          />
-                        </>
+                        <Bar 
+                          dataKey="cumulativeBalance" 
+                          fill="hsl(221 83% 53%)" 
+                          name="Balance Acumulado"
+                          radius={[4, 4, 0, 0]}
+                        />
                       ) : (
                         <>
                           <Bar 
@@ -999,47 +971,6 @@ export default function Dashboard() {
                       )}
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
-                {/* Tabla de datos debajo del gráfico - MEJORADA */}
-                <div className="mt-4 border-t pt-3 max-h-40 overflow-y-auto">
-                  <div className="mb-3">
-                    <div className="text-xs font-semibold text-gray-700 mb-1">Resumen Mensual</div>
-                    <div className="text-xs text-gray-500 leading-relaxed">
-                      <p className="mb-1">
-                        <span className="font-medium text-green-600">Ingresos:</span> Total de dinero que recibiste ese mes
-                      </p>
-                      <p className="mb-1">
-                        <span className="font-medium text-red-600">Gastos:</span> Total de dinero que gastaste ese mes
-                      </p>
-                      <p>
-                        <span className="font-medium">Balance:</span> Diferencia entre ingresos y gastos (verde = positivo, rojo = negativo)
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {/* Encabezados */}
-                    <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-gray-600 pb-1 border-b">
-                      <div>Mes</div>
-                      <div className="text-right text-green-600">Ingresos</div>
-                      <div className="text-right text-red-600">Gastos</div>
-                      <div className="text-right">Balance</div>
-                    </div>
-                    {/* Datos */}
-                    {chartData.slice(-6).reverse().map((item, idx) => (
-                      <div key={idx} className="grid grid-cols-4 gap-2 text-xs py-1 hover:bg-gray-50 rounded px-1">
-                        <div className="font-medium text-gray-700">{item.name}</div>
-                        <div className="text-right text-green-600 font-medium">
-                          {formatCurrency(item.income || 0, defaultCurrency)}
-                        </div>
-                        <div className="text-right text-red-600 font-medium">
-                          {formatCurrency(item.expense || 0, defaultCurrency)}
-                        </div>
-                        <div className={`text-right font-semibold ${(item.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(item.balance || 0, defaultCurrency)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
               )}
