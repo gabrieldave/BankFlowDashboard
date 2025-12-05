@@ -861,6 +861,15 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
+              ) : chartData.every(d => (d.income || 0) === 0 && (d.expense || 0) === 0 && (d.balance || 0) === 0) ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center space-y-2">
+                    <p className="text-sm">Los datos del gráfico están en cero</p>
+                    <p className="text-xs text-muted-foreground">
+                      Todas las transacciones tienen valores en cero. Verifica los datos.
+                    </p>
+                  </div>
+                </div>
               ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
@@ -893,6 +902,7 @@ export default function Dashboard() {
                     axisLine={false} 
                     tickLine={false} 
                     tick={{ fill: '#6b7280', fontSize: 12 }}
+                    domain={['auto', 'auto']}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -978,7 +988,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="h-[250px] w-full relative">
+              <div className="h-[200px] w-full relative">
                 {categoryDataWithColors.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
                     <p>No hay datos de categorías para mostrar</p>
@@ -990,8 +1000,8 @@ export default function Dashboard() {
                       data={categoryDataWithColors}
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
+                      innerRadius={50}
+                      outerRadius={70}
                       paddingAngle={5}
                       dataKey="value"
                       stroke="none"
@@ -1006,15 +1016,15 @@ export default function Dashboard() {
                   </PieChart>
                 </ResponsiveContainer>
                 )}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="text-center space-y-1">
-                    <p className="text-xs text-muted-foreground mb-1">Total Gastos</p>
-                    <p className="text-xl font-bold text-foreground leading-tight">
-                      {formatCurrency(stats?.monthlyExpenses || 0, defaultCurrency)}
-                    </p>
-                  </div>
-                </div>
               </div>
+              {categoryDataWithColors.length > 0 && (
+                <div className="text-center pt-2 border-t border-gray-100">
+                  <p className="text-xs text-muted-foreground mb-1">Total Gastos</p>
+                  <p className="text-lg font-bold text-foreground">
+                    {formatCurrency(stats?.monthlyExpenses || 0, defaultCurrency)}
+                  </p>
+                </div>
+              )}
               {categoryDataWithColors.length > 0 && (
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   {categoryDataWithColors.map((entry, index) => {
